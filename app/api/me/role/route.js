@@ -12,31 +12,34 @@ export async function GET(req) {
   try {
     const auth = req.headers.get("authorization") || "";
     const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
-    if (!token) {
-      return new Response(JSON.stringify({ ok: true, signedIn: false, isMentorApproved: false }), { status: 200 });
+    if (!token) return new Response(JSON.stringify({ ok: true, signedIn: false }), { status: 200 });
+
+    const { data: userData, error } = await supabaseAdmin.auth.getUser(token);
+    if (error || !userData?.user) {
+      return new Response(JSON.stringify({ ok: true, signedIn: false }), { status: 200 });
     }
 
-    const { data: userData } = await supabaseAdmin.auth.getUser(token);
-    const user = userData?.user;
-    if (!user) {
-      return new Response(JSON.stringify({ ok: true, signedIn: false, isMentorApproved: false }), { status: 200 });
-    }
-
-    const email = user.email ?? null;
+    const userId = userData.user.id;
+    const email = userData.user.email ?? null;
 
     const { data: prof } = await supabaseAdmin
       .from("profiles")
       .select("role, display_name")
-      .eq("id", user.id)
+      .eq("id", userId)
       .single();
 
     const { data: mentor } = await supabaseAdmin
       .from("mentors")
       .select("account_status")
-      .eq("user_id", user.id)
+      .eq("user_id", userId)
       .single();
 
-    const isMentorApproved = mentor?.account_status === "approved";
+    const mentorAccountStatus = mentor?.account_status ?? null;
+
+    // Active mentor if explicitly approved, or (fallback) role is mentor and no status recorded
+    const isActiveMentor =
+      mentorAccountStatus === "approved" ||
+      (prof?.role === "mentor" && mentorAccountStatus == null);
 
     return new Response(
       JSON.stringify({
@@ -45,8 +48,9 @@ export async function GET(req) {
         email,
         role: prof?.role || "mentee",
         displayName: prof?.display_name || (email ? email.split("@")[0] : null),
-        isMentorApproved,
         isAdmin: isAllowed(email),
+        mentorAccountStatus,
+        isActiveMentor,
       }),
       { status: 200, headers: { "content-type": "application/json" } }
     );
