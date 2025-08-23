@@ -23,14 +23,11 @@ export default async function MentorsPage({
 
   let query = supabase
     .from("mentors")
-    .select(
-      "id,slug,display_name,headline,rate,tags,location,years_exp"
-    )
+    .select("id,slug,display_name,headline,rate,tags,location,years_exp")
     .order("created_at", { ascending: false });
 
   if (q && q.trim()) {
     const s = `%${q.trim()}%`;
-    // simple multi-field search
     query = query.or(
       `display_name.ilike.${s},headline.ilike.${s},location.ilike.${s}`
     );
@@ -45,7 +42,8 @@ export default async function MentorsPage({
       <p className="mt-2 opacity-70">
         {q ? (
           <>
-            Showing results for <span className="font-mono">"{q}"</span>
+            Showing results for{" "}
+            <span className="font-mono">&quot;{q}&quot;</span>
           </>
         ) : (
           <>Browse all mentors.</>
