@@ -8,26 +8,53 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
-export default async function MentorsPage() {
-  const { data, error } = await supabase
+export default async function MentorsPage({
+  searchParams,
+}: {
+  searchParams?: { q?: string };
+}) {
+  const q = (searchParams?.q || "").trim();
+
+  let query = supabase
     .from("mentors")
-    .select(
-      "id,slug,display_name,headline,rate,tags,location,years_exp"
-    )
+    .select("id,slug,display_name,headline,rate,tags,location,years_exp")
     .order("created_at", { ascending: false });
 
-  if (error) console.error(error);
+  // Basic keyword search across a few text columns
+  if (q) {
+    query = query.or(
+      `display_name.ilike.%${q}%,headline.ilike.%${q}%,location.ilike.%${q}%`
+    );
+  }
+
+  const { data } = await query;
   const mentors = (data ?? []) as Mentor[];
 
   return (
     <main className="mx-auto max-w-6xl px-6 py-10">
-      <h1 className="text-3xl font-bold">Browse Mentors</h1>
-      <p className="mt-2 opacity-70">Hand-picked experts you can book today.</p>
-      <div className="mt-8 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {mentors.map((m) => (
-          <MentorCard key={m.id} m={m} />
-        ))}
-      </div>
+      <h1 className="text-2xl font-semibold">Mentors</h1>
+
+      <form action="/mentors" method="get" className="mt-4 max-w-xl">
+        <div className="flex overflow-hidden rounded-2xl border">
+          <input
+            name="q"
+            defaultValue={q}
+            placeholder="Search mentors…"
+            className="flex-1 bg-black px-4 py-3 text-white outline-none"
+          />
+          <button className="px-5 py-3 border-l hover:shadow">Search</button>
+        </div>
+      </form>
+
+      {mentors.length === 0 ? (
+        <div className="mt-8 rounded-2xl border p-6 opacity-70">No mentors found.</div>
+      ) : (
+        <div className="mt-8 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {mentors.map((m) => (
+            <MentorCard key={m.id} m={m} />
+          ))}
+        </div>
+      )}
     </main>
   );
 }
