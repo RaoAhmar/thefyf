@@ -1,51 +1,40 @@
-import { DeployButton } from "@/components/deploy-button";
-import { EnvVarWarning } from "@/components/env-var-warning";
-import { AuthButton } from "@/components/auth-button";
-import { Hero } from "@/components/hero";
-import { ThemeSwitcher } from "@/components/theme-switcher";
-import { ConnectSupabaseSteps } from "@/components/tutorial/connect-supabase-steps";
-import { SignUpUserSteps } from "@/components/tutorial/sign-up-user-steps";
-import { hasEnvVars } from "@/lib/utils";
-import Link from "next/link";
+import { createClient } from '@supabase/supabase-js';
+import MentorCard, { Mentor } from '@/components/MentorCard';
 
-export default function Home() {
+export const revalidate = 60;
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
+
+export default async function Home() {
+  const { data } = await supabase
+    .from('mentors')
+    .select('id,slug,display_name,headline,rate,tags,location,years_exp')
+    .limit(6);
+
+  const mentors = (data ?? []) as Mentor[];
+
   return (
-    <main className="min-h-screen flex flex-col items-center">
-      <div className="flex-1 w-full flex flex-col gap-20 items-center">
-        <nav className="w-full flex justify-center border-b border-b-foreground/10 h-16">
-          <div className="w-full max-w-5xl flex justify-between items-center p-3 px-5 text-sm">
-            <div className="flex gap-5 items-center font-semibold">
-              <Link href={"/"}>Next.js Supabase Starter</Link>
-              <div className="flex items-center gap-2">
-                <DeployButton />
-              </div>
-            </div>
-            {!hasEnvVars ? <EnvVarWarning /> : <AuthButton />}
-          </div>
-        </nav>
-        <div className="flex-1 flex flex-col gap-20 max-w-5xl p-5">
-          <Hero />
-          <main className="flex-1 flex flex-col gap-6 px-4">
-            <h2 className="font-medium text-xl mb-4">Next steps</h2>
-            {hasEnvVars ? <SignUpUserSteps /> : <ConnectSupabaseSteps />}
-          </main>
+    <main className="mx-auto max-w-6xl px-6 py-10">
+      <section className="py-16 text-center">
+        <h1 className="text-4xl font-bold">Find your fit, faster.</h1>
+        <p className="mt-3 opacity-70">Book mentors for career, data, product and more.</p>
+        <div className="mt-6">
+          <a href="/mentors" className="rounded-full border px-4 py-2 transition hover:shadow-md">Browse mentors</a>
         </div>
+      </section>
 
-        <footer className="w-full flex items-center justify-center border-t mx-auto text-center text-xs gap-8 py-16">
-          <p>
-            Powered by{" "}
-            <a
-              href="https://supabase.com/?utm_source=create-next-app&utm_medium=template&utm_term=nextjs"
-              target="_blank"
-              className="font-bold hover:underline"
-              rel="noreferrer"
-            >
-              Supabase
-            </a>
-          </p>
-          <ThemeSwitcher />
-        </footer>
-      </div>
+      <section>
+        <div className="flex items-center justify-between">
+          <h2 className="text-xl font-semibold">Featured mentors</h2>
+          <a className="text-sm underline opacity-80" href="/mentors">View all</a>
+        </div>
+        <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {mentors.map(m => <MentorCard key={m.id} m={m} />)}
+        </div>
+      </section>
     </main>
   );
 }
