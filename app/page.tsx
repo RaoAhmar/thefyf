@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { createClient } from "@supabase/supabase-js";
 import MentorCard, { Mentor } from "@/components/MentorCard";
-import SearchHero from "@/components/SearchHero"; // ⬅️ add this
+import SearchHero from "@/components/SearchHero";
 
 export const revalidate = 60;
 
@@ -11,12 +11,17 @@ const supabase = createClient(
 );
 
 export default async function Home() {
-  const { data } = await supabase
+  const { data, count } = await supabase
     .from("mentors")
-    .select("id,slug,display_name,headline,rate,tags,location,years_exp")
-    .order("created_at", { ascending: false });
+    .select(
+      "id,slug,display_name,headline,rate,tags,location,years_exp",
+      { count: "exact" }
+    )
+    .order("created_at", { ascending: false })
+    .limit(6);
 
   const mentors = (data ?? []) as Mentor[];
+  const total = count ?? mentors.length;
 
   return (
     <main className="mx-auto max-w-6xl px-6 py-16">
@@ -29,15 +34,15 @@ export default async function Home() {
           Book mentors for career, data, product and more.
         </p>
 
-        {/* 🔎 search bar replaces the two buttons */}
+        {/* 🔎 search */}
         <SearchHero />
       </section>
 
-      {/* list stays as-is for now; we'll limit to 6 in a later step */}
+      {/* show at most 6 mentors */}
       <section className="mt-14">
         <div className="flex items-center justify-between">
           <h2 className="text-xl font-semibold">
-            {mentors.length ? `Mentors (${mentors.length})` : "Mentors"}
+            {total ? `Mentors (${Math.min(6, total)} of ${total})` : "Mentors"}
           </h2>
           <Link href="/mentors" className="text-sm underline opacity-80">
             View all
