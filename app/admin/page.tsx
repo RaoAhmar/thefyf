@@ -18,18 +18,14 @@ type Row = {
 export default function AdminPage() {
   const [email, setEmail] = useState<string | null>(null);
   const [rows, setRows] = useState<Row[] | null>(null);
-  const [state, setState] = useState<
-    "loading" | "noauth" | "forbidden" | "ok" | "error"
-  >("loading");
+  const [state, setState] = useState<"loading" | "noauth" | "forbidden" | "ok" | "error">("loading");
+  const [busyId, setBusyId] = useState<string | null>(null);
 
   useEffect(() => {
     async function run() {
       const { data } = await supabaseBrowser.auth.getSession();
       const session = data.session;
-      if (!session) {
-        setState("noauth");
-        return;
-      }
+      if (!session) return setState("noauth");
       setEmail(session.user.email ?? null);
 
       try {
@@ -49,12 +45,37 @@ export default function AdminPage() {
     run();
   }, []);
 
+  async function updateStatus(id: string, status: Row["status"]) {
+    if (!rows) return;
+    setBusyId(id);
+    try {
+      const { data } = await supabaseBrowser.auth.getSession();
+      const token = data.session?.access_token;
+      if (!token) return setState("noauth");
+
+      const res = await fetch(`/api/admin/requests/${id}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ status }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.ok) throw new Error("bad");
+
+      setRows(rows.map((r) => (r.id === id ? (json.row as Row) : r)));
+    } catch {
+      alert("Failed to update status. Try again.");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   return (
     <main className="mx-auto max-w-6xl px-6 py-10">
       <h1 className="text-3xl font-bold">Admin · Requests</h1>
-      <p className="mt-2 opacity-70">
-        Read-only list of session requests. (Monochrome UI)
-      </p>
+      <p className="mt-2 opacity-70">Accept or decline session requests.</p>
 
       {state === "loading" && (
         <div className="mt-8 animate-pulse">
@@ -66,10 +87,7 @@ export default function AdminPage() {
       {state === "noauth" && (
         <div className="mt-8 rounded-2xl border p-5">
           <div className="opacity-80">You must sign in to view this page.</div>
-          <Link
-            href="/auth"
-            className="mt-3 inline-block rounded-full border px-4 py-2 hover:shadow"
-          >
+          <Link href="/auth" className="mt-3 inline-block rounded-full border px-4 py-2 hover:shadow">
             Go to Sign in
           </Link>
         </div>
@@ -77,12 +95,8 @@ export default function AdminPage() {
 
       {state === "forbidden" && (
         <div className="mt-8 rounded-2xl border p-5">
-          <div className="text-red-400">
-            Your account is not whitelisted for admin access.
-          </div>
-          <div className="mt-3 text-sm opacity-70">
-            Signed in as {email ?? "unknown"}.
-          </div>
+          <div className="text-red-400">Your account is not whitelisted for admin access.</div>
+          <div className="mt-3 text-sm opacity-70">Signed in as {email ?? "unknown"}.</div>
         </div>
       )}
 
@@ -109,6 +123,7 @@ export default function AdminPage() {
                   <th className="border-b px-3 py-2">Preferred time</th>
                   <th className="border-b px-3 py-2">Message</th>
                   <th className="border-b px-3 py-2">Status</th>
+                  <th className="border-b px-3 py-2">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -118,24 +133,37 @@ export default function AdminPage() {
                       {new Date(r.created_at).toLocaleString()}
                     </td>
                     <td className="border-b px-3 py-2">
-                      <Link
-                        href={`/mentors/${r.mentor_slug}`}
-                        className="underline"
-                      >
+                      <Link href={`/mentors/${r.mentor_slug}`} className="underline">
                         {r.mentor_slug}
                       </Link>
                     </td>
                     <td className="border-b px-3 py-2">{r.requester_name}</td>
-                    <td className="border-b px-3 py-2 font-mono">
-                      {r.requester_email}
-                    </td>
-                    <td className="border-b px-3 py-2">
-                      {r.preferred_time || "—"}
-                    </td>
-                    <td className="border-b px-3 py-2">
-                      {r.message || "—"}
-                    </td>
+                    <td className="border-b px-3 py-2 font-mono">{r.requester_email}</td>
+                    <td className="border-b px-3 py-2">{r.preferred_time || "—"}</td>
+                    <td className="border-b px-3 py-2">{r.message || "—"}</td>
                     <td className="border-b px-3 py-2">{r.status}</td>
+                    <td className="border-b px-3 py-2">
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => updateStatus(r.id, "accepted")}
+                          disabled={busyId === r.id}
+                          className={`rounded-full border px-3 py-1 text-xs transition ${
+                            busyId === r.id ? "opacity-60" : "hover:shadow"
+                          }`}
+                        >
+                          Accept
+                        </button>
+                        <button
+                          onClick={() => updateStatus(r.id, "declined")}
+                          disabled={busyId === r.id}
+                          className={`rounded-full border px-3 py-1 text-xs transition ${
+                            busyId === r.id ? "opacity-60" : "hover:shadow"
+                          }`}
+                        >
+                          Decline
+                        </button>
+                      </div>
+                    </td>
                   </tr>
                 ))}
               </tbody>
