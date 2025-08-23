@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { createClient } from "@supabase/supabase-js";
 import MentorCard, { Mentor } from "@/components/MentorCard";
+import SearchHero from "@/components/SearchHero"; // ⬅️ add this
 
 export const revalidate = 60;
 
@@ -13,8 +14,7 @@ export default async function Home() {
   const { data } = await supabase
     .from("mentors")
     .select("id,slug,display_name,headline,rate,tags,location,years_exp")
-    .order("created_at", { ascending: false })
-    .limit(6);
+    .order("created_at", { ascending: false });
 
   const mentors = (data ?? []) as Mentor[];
 
@@ -22,31 +22,18 @@ export default async function Home() {
     <main className="mx-auto max-w-6xl px-6 py-16">
       {/* hero */}
       <section className="text-center">
-        <h1 className="text-5xl font-extrabold tracking-tight">Find your fit, faster.</h1>
+        <h1 className="text-5xl font-extrabold tracking-tight">
+          Find your fit, faster.
+        </h1>
         <p className="mt-4 text-lg opacity-80">
           Book mentors for career, data, product and more.
         </p>
 
-        {/* Search to /mentors */}
-        <form action="/mentors" method="get" className="mx-auto mt-8 max-w-2xl">
-          <label htmlFor="q" className="sr-only">Search mentors</label>
-          <div className="flex overflow-hidden rounded-2xl border">
-            <input
-              id="q"
-              name="q"
-              type="text"
-              placeholder="Search mentors by name, skill, location…"
-              className="flex-1 bg-black px-4 py-3 text-white outline-none"
-              required
-            />
-            <button type="submit" className="px-5 py-3 border-l hover:shadow">
-              Search
-            </button>
-          </div>
-        </form>
+        {/* 🔎 search bar replaces the two buttons */}
+        <SearchHero />
       </section>
 
-      {/* limited mentors */}
+      {/* list stays as-is for now; we'll limit to 6 in a later step */}
       <section className="mt-14">
         <div className="flex items-center justify-between">
           <h2 className="text-xl font-semibold">
