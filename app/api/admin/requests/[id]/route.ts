@@ -8,44 +8,51 @@ function isAllowed(email?: string | null) {
   return email ? list.includes(email.toLowerCase()) : false;
 }
 
-type Params = { id: string };
-type Ctx = { params: Params | Promise<Params> };
-
-function isPromise<T>(val: unknown): val is Promise<T> {
-  return !!val && typeof val === "object" && typeof (val as { then?: unknown }).then === "function";
-}
-
-export async function PATCH(req: Request, ctx: Ctx) {
+export async function PATCH(
+  req: Request,
+  ctx: Promise<{ params: { id: string } }>
+) {
   try {
-    const p = ctx.params;
-    const params = isPromise<Params>(p) ? await p : p;
+    // Next.js 15: context is a Promise
+    const { params } = await ctx;
     const id = params?.id;
-
     if (!id) {
-      return new Response(JSON.stringify({ ok: false, error: "Missing id" }), { status: 400 });
+      return new Response(JSON.stringify({ ok: false, error: "Missing id" }), {
+        status: 400,
+      });
     }
 
     const auth = req.headers.get("authorization") || "";
     const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
-
     if (!token) {
-      return new Response(JSON.stringify({ ok: false, error: "No token" }), { status: 401 });
+      return new Response(JSON.stringify({ ok: false, error: "No token" }), {
+        status: 401,
+      });
     }
 
-    const { data: userData, error: userErr } = await supabaseAdmin.auth.getUser(token);
+    // Validate Supabase access token and check admin whitelist
+    const { data: userData, error: userErr } = await supabaseAdmin.auth.getUser(
+      token
+    );
     if (userErr || !userData?.user) {
-      return new Response(JSON.stringify({ ok: false, error: "Bad token" }), { status: 401 });
+      return new Response(JSON.stringify({ ok: false, error: "Bad token" }), {
+        status: 401,
+      });
     }
-
     if (!isAllowed(userData.user.email ?? null)) {
-      return new Response(JSON.stringify({ ok: false, error: "Forbidden" }), { status: 403 });
+      return new Response(JSON.stringify({ ok: false, error: "Forbidden" }), {
+        status: 403,
+      });
     }
 
-    const body = await req.json().catch(() => ({} as { status?: string }));
+    const body = (await req.json().catch(() => ({}))) as {
+      status?: string;
+    };
     const status = String(body?.status ?? "").toLowerCase();
-
     if (!["pending", "accepted", "declined"].includes(status)) {
-      return new Response(JSON.stringify({ ok: false, error: "Invalid status" }), { status: 400 });
+      return new Response(JSON.stringify({ ok: false, error: "Invalid status" }), {
+        status: 400,
+      });
     }
 
     const { data, error } = await supabaseAdmin
@@ -58,7 +65,9 @@ export async function PATCH(req: Request, ctx: Ctx) {
       .single();
 
     if (error) {
-      return new Response(JSON.stringify({ ok: false, error: "Update failed" }), { status: 500 });
+      return new Response(JSON.stringify({ ok: false, error: "Update failed" }), {
+        status: 500,
+      });
     }
 
     return new Response(JSON.stringify({ ok: true, row: data }), {
@@ -66,6 +75,8 @@ export async function PATCH(req: Request, ctx: Ctx) {
       headers: { "content-type": "application/json" },
     });
   } catch {
-    return new Response(JSON.stringify({ ok: false, error: "Server error" }), { status: 500 });
+    return new Response(JSON.stringify({ ok: false, error: "Server error" }), {
+      status: 500,
+    });
   }
 }
