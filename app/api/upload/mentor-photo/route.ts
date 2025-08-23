@@ -11,6 +11,8 @@ function pickExt(filename?: string, mime?: string) {
   return "jpg";
 }
 
+type CreateSignedUploadUrlData = { signedUrl: string; token: string };
+
 export async function POST(req: Request) {
   try {
     const auth = req.headers.get("authorization") || "";
@@ -34,19 +36,19 @@ export async function POST(req: Request) {
     const stamp = new Date().toISOString().replace(/[:.]/g, "-");
     const path = `${uid}/${stamp}.${ext}`;
 
-    // Create a short-lived signed upload ticket (no storage policies needed)
-    const { data, error } = await supabaseAdmin
-      .storage
+    const { data, error } = await supabaseAdmin.storage
       .from("mentor-photos")
-      .createSignedUploadUrl(path, 120); // valid for 2 minutes
+      // NOTE: second arg is options, not expires; pass upsert if you want to allow overwrites
+      .createSignedUploadUrl(path, { upsert: true });
 
     if (error || !data) {
       return new Response(JSON.stringify({ ok: false, error: "sign_failed" }), { status: 500 });
     }
 
-    // We return path + token; client will call uploadToSignedUrl(path, token, file)
+    const payload = data as CreateSignedUploadUrlData;
+
     return new Response(
-      JSON.stringify({ ok: true, path: data.path, token: data.token }),
+      JSON.stringify({ ok: true, path, token: payload.token, signedUrl: payload.signedUrl }),
       { status: 200, headers: { "content-type": "application/json" } }
     );
   } catch {
