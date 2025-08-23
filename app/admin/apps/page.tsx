@@ -9,20 +9,18 @@ type SP = Promise<Record<string, string | string[] | undefined>>;
 const TABS = ["pending", "approved", "declined", "suspended", "blocked"] as const;
 type Tab = (typeof TABS)[number];
 
-function getTab(raw?: string | string[]): Tab {
+function pickTab(raw?: string | string[]): Tab {
   const v = Array.isArray(raw) ? raw[0] : raw;
   return (TABS.includes((v as Tab) || "pending") ? (v as Tab) : "pending");
 }
 
 export default async function Page({ searchParams }: { searchParams: SP }) {
   const sp = await searchParams;
-  const tab = getTab(sp.tab);
+  const tab = pickTab(sp.tab);
 
-  const { data, error } = await supabaseAdmin
+  const { data } = await supabaseAdmin
     .from("mentor_applications")
-    .select(
-      "id, created_at, display_name, user_id, headline, rate, tags, status"
-    )
+    .select("id, created_at, display_name, user_id, headline, rate, tags, status")
     .eq("status", tab)
     .order("created_at", { ascending: false });
 
@@ -45,9 +43,7 @@ export default async function Page({ searchParams }: { searchParams: SP }) {
           <Link
             key={t}
             href={`/admin/apps?tab=${t}`}
-            className={`rounded-full border px-3 py-1 capitalize ${
-              tab === t ? "bg-white/10" : ""
-            }`}
+            className={`rounded-full border px-3 py-1 capitalize ${tab === t ? "bg-white/10" : ""}`}
           >
             {t}
           </Link>
