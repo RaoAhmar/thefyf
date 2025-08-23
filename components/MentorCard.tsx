@@ -13,32 +13,32 @@ export type Mentor = {
 
 export default function MentorCard({ m }: { m: Mentor }) {
   return (
-    <Link
-      href={`/mentors/${m.slug}`}
-      className="group block rounded-2xl border p-4 transition-all hover:-translate-y-0.5 hover:shadow-lg"
-    >
-      <div className="flex items-start justify-between">
-        <h3 className="text-lg font-semibold">{m.display_name}</h3>
-        {m.rate != null && (
-          <span className="text-sm opacity-70">PKR {m.rate}/hr</span>
-        )}
+    <div className="rounded-2xl border p-4">
+      <div className="flex items-start justify-between gap-3">
+        <Link href={`/mentors/${m.slug}`} className="text-lg font-semibold underline-offset-4 hover:underline">
+          {m.display_name}
+        </Link>
+        <div className="opacity-80">{m.rate != null ? `PKR ${m.rate}/hr` : "—"}</div>
       </div>
-      {m.headline && <p className="mt-1 text-sm opacity-80">{m.headline}</p>}
-      {m.tags && m.tags.length > 0 && (
-        <div className="mt-3 flex flex-wrap gap-1">
-          {m.tags.slice(0, 4).map((t) => (
-            <span
-              key={t}
-              className="rounded-full border px-2 py-0.5 text-xs opacity-80"
-            >
-              {t}
-            </span>
-          ))}
-        </div>
-      )}
-      <div className="mt-3 text-xs opacity-60">
-        {m.location || "Remote"} · {(m.years_exp ?? 0)} yrs
+
+      <div className="mt-1 opacity-80">{m.headline || "—"}</div>
+
+      <div className="mt-3 flex flex-wrap gap-2 text-xs opacity-80">
+        {m.tags?.map((t) => (
+          <span key={t} className="rounded-full border px-2 py-0.5">{t}</span>
+        ))}
+        {m.location && <span className="rounded-full border px-2 py-0.5">{m.location}</span>}
+        {m.years_exp != null && <span className="rounded-full border px-2 py-0.5">{m.years_exp} yrs</span>}
       </div>
-    </Link>
+
+      <div className="mt-4 flex justify-end">
+        <Link
+          href={`/mentors/${m.slug}`}
+          className="rounded-full border px-3 py-1 text-sm transition hover:shadow"
+        >
+          Book now
+        </Link>
+      </div>
+    </div>
   );
 }
