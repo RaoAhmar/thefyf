@@ -2,243 +2,437 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { supabaseBrowser } from "@/lib/supabaseClient";
 
-type AppRow = {
-  id: string;
-  user_id: string;
-  headline: string | null;
-  bio: string | null;
-  rate: number | null;
-  tags: string[] | null;
-  status: "pending" | "approved" | "declined";
-  created_at: string;
+type TagOption = { id: string; name: string; sort_order?: number };
+type Country = { code: string; name: string };
+
+type Role = {
+  title: string;
+  company: string;
+  start: string; // YYYY-MM
+  end?: string;  // YYYY-MM | ""
+  current: boolean;
+  description?: string;
 };
 
 export default function ApplyPage() {
   const [sessionEmail, setSessionEmail] = useState<string | null>(null);
-  const [userId, setUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [app, setApp] = useState<AppRow | null>(null);
 
-  // form state
+  // Form state
+  const [first, setFirst] = useState("");
+  const [last, setLast] = useState("");
   const [headline, setHeadline] = useState("");
   const [bio, setBio] = useState("");
+  const [linkedin, setLinkedin] = useState("");
+  const [portfolio, setPortfolio] = useState("");
+  const [country, setCountry] = useState<string>("");
+  const [city, setCity] = useState<string>("");
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const [roles, setRoles] = useState<Role[]>([
+    { title: "", company: "", start: "", end: "", current: false, description: "" },
+  ]);
   const [rate, setRate] = useState<string>("");
-  const [tagsCsv, setTagsCsv] = useState("");
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
 
-  const pending = app?.status === "pending";
-  const approved = app?.status === "approved";
-  const declined = app?.status === "declined";
+  // Options
+  const [tags, setTags] = useState<TagOption[]>([]);
+  const [countries, setCountries] = useState<Country[]>([]);
+  const [cities, setCities] = useState<string[]>([]);
+  const [busyCities, setBusyCities] = useState(false);
 
+  // Load session + options
   useEffect(() => {
-    async function bootstrap() {
-      const { data } = await supabaseBrowser.auth.getSession();
-      const s = data.session;
-      if (!s) {
-        setLoading(false);
-        return;
-      }
-      setSessionEmail(s.user.email ?? null);
-      setUserId(s.user.id);
+    let abort = false;
+    async function run() {
+      try {
+        const { data } = await supabaseBrowser.auth.getSession();
+        const email = data.session?.user?.email ?? null;
+        if (!abort) setSessionEmail(email);
 
-      // fetch latest application (if any)
-      const { data: apps } = await supabaseBrowser
-        .from("mentor_applications")
-        .select("*")
-        .eq("user_id", s.user.id)
-        .order("created_at", { ascending: false })
-        .limit(1);
+        // tags (admin controlled)
+        const t = await fetch("/api/tags/options");
+        const tj = await t.json();
+        if (!abort && t.ok && tj.ok) setTags(tj.rows as TagOption[]);
 
-      if (apps && apps[0]) {
-        const a = apps[0] as AppRow;
-        setApp(a);
-        setHeadline(a.headline ?? "");
-        setBio(a.bio ?? "");
-        setRate(a.rate != null ? String(a.rate) : "");
-        setTagsCsv((a.tags ?? []).join(", "));
+        // countries
+        const c = await fetch("/api/geo/countries");
+        const cj = await c.json();
+        if (!abort && c.ok && cj.ok) setCountries(cj.rows as Country[]);
+      } finally {
+        if (!abort) setLoading(false);
       }
-      setLoading(false);
     }
-    bootstrap();
+    run();
+    return () => {
+      abort = true;
+    };
   }, []);
 
-  const canEdit = useMemo(() => !!userId && (!app || pending), [userId, app, pending]);
-
-  async function onSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!userId) return;
-
-    const cleanRate = rate.trim() ? parseInt(rate.trim(), 10) : null;
-    const cleanTags =
-      tagsCsv
-        .split(",")
-        .map((t) => t.trim())
-        .filter(Boolean) || [];
-
-    try {
-      setLoading(true);
-      if (app && pending) {
-        const { error } = await supabaseBrowser
-          .from("mentor_applications")
-          .update({
-            headline: headline || null,
-            bio: bio || null,
-            rate: cleanRate,
-            tags: cleanTags,
-          })
-          .eq("id", app.id)
-          .select("*")
-          .single();
-
-        if (error) throw error;
-      } else {
-        const { data, error } = await supabaseBrowser
-          .from("mentor_applications")
-          .insert({
-            user_id: userId,
-            headline: headline || null,
-            bio: bio || null,
-            rate: cleanRate,
-            tags: cleanTags,
-          })
-          .select("*")
-          .single();
-
-        if (error) throw error;
-        setApp(data as AppRow);
+  // When country changes, fetch its cities
+  useEffect(() => {
+    let abort = false;
+    async function loadCities() {
+      if (!country) {
+        setCities([]);
+        setCity("");
+        return;
       }
-
-      // refetch to reflect current status/values
-      const { data: apps } = await supabaseBrowser
-        .from("mentor_applications")
-        .select("*")
-        .eq("user_id", userId)
-        .order("created_at", { ascending: false })
-        .limit(1);
-
-      if (apps && apps[0]) setApp(apps[0] as AppRow);
-      alert("Application saved.");
-    } catch {
-      alert("Could not save your application. Please try again.");
-    } finally {
-      setLoading(false);
+      setBusyCities(true);
+      try {
+        const r = await fetch(`/api/geo/cities?country=${encodeURIComponent(country)}`);
+        const j = await r.json();
+        if (!abort && r.ok && j.ok) {
+          setCities(j.rows as string[]);
+          setCity("");
+        }
+      } finally {
+        if (!abort) setBusyCities(false);
+      }
     }
-  }
+    loadCities();
+    return () => {
+      abort = true;
+    };
+  }, [country]);
 
-  if (loading) {
-    return (
-      <main className="mx-auto max-w-3xl px-6 py-10">
-        <div className="animate-pulse">
-          <div className="h-8 w-64 rounded bg-white/10" />
-          <div className="mt-4 h-28 w-full rounded bg-white/10" />
-        </div>
-      </main>
+  // Photo preview
+  useEffect(() => {
+    if (!photoFile) {
+      setPhotoPreview(null);
+      return;
+    }
+    const url = URL.createObjectURL(photoFile);
+    setPhotoPreview(url);
+    return () => URL.revokeObjectURL(url);
+  }, [photoFile]);
+
+  // Helpers
+  function toggleTag(id: string) {
+    setSelectedTags((prev) =>
+      prev.includes(id) ? prev.filter((t) => t !== id) : [...prev, id]
     );
   }
 
-  if (!userId) {
-    return (
-      <main className="mx-auto max-w-3xl px-6 py-10">
-        <h1 className="text-3xl font-bold">Apply to become a mentor</h1>
-        <p className="mt-2 opacity-70">Please sign in to submit an application.</p>
-        <Link href="/auth" className="mt-4 inline-block rounded-full border px-4 py-2 hover:shadow">
-          Sign in
-        </Link>
-      </main>
-    );
+  function updateRole(idx: number, patch: Partial<Role>) {
+    setRoles((arr) => {
+      const next = [...arr];
+      next[idx] = { ...next[idx], ...patch };
+      if (patch.current) {
+        next[idx].end = ""; // clear end if current
+      }
+      return next;
+    });
   }
+
+  function addRole() {
+    setRoles((arr) => [
+      ...arr,
+      { title: "", company: "", start: "", end: "", current: false, description: "" },
+    ]);
+  }
+
+  function removeRole(idx: number) {
+    setRoles((arr) => arr.filter((_, i) => i !== idx));
+  }
+
+  const disabledSubmit = useMemo(() => {
+    // UI step only — saving wired in next step
+    return true;
+  }, []);
 
   return (
     <main className="mx-auto max-w-3xl px-6 py-10">
       <h1 className="text-3xl font-bold">Apply to become a mentor</h1>
-      <p className="mt-2 opacity-70">
-        Signed in as <span className="font-mono">{sessionEmail}</span>
-      </p>
+      {sessionEmail && (
+        <p className="mt-2 opacity-70">Signed in as <span className="font-mono">{sessionEmail}</span></p>
+      )}
 
-      {approved && (
-        <div className="mt-6 rounded-2xl border p-4">
-          <div className="text-green-400">
-            Your application is approved. You’ll soon get access to the mentor tools.
+      {loading ? (
+        <div className="mt-8 animate-pulse">
+          <div className="h-8 w-64 rounded bg-white/10" />
+          <div className="mt-4 h-48 w-full rounded bg-white/10" />
+        </div>
+      ) : (
+        <form className="mt-8 grid gap-6">
+          {/* Name */}
+          <div className="grid gap-3 md:grid-cols-2">
+            <div>
+              <label className="block text-sm opacity-80">First name</label>
+              <input
+                value={first}
+                onChange={(e) => setFirst(e.target.value)}
+                className="mt-1 w-full rounded-xl border bg-black p-3"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm opacity-80">Last name</label>
+              <input
+                value={last}
+                onChange={(e) => setLast(e.target.value)}
+                className="mt-1 w-full rounded-xl border bg-black p-3"
+                required
+              />
+            </div>
           </div>
-          <div className="mt-2 text-sm opacity-70">You can still view your submitted info below.</div>
-        </div>
-      )}
 
-      {declined && (
-        <div className="mt-6 rounded-2xl border p-4">
-          <div className="text-red-400">
-            Your application was declined. You can edit and resubmit.
-          </div>
-        </div>
-      )}
-
-      {pending && (
-        <div className="mt-6 rounded-2xl border p-4">
-          <div className="text-yellow-300">Your application is pending review.</div>
-          <div className="mt-2 text-sm opacity-70">You can edit it until a decision is made.</div>
-        </div>
-      )}
-
-      <form onSubmit={onSubmit} className="mt-6 grid gap-3">
-        <label className="text-sm opacity-80">Headline</label>
-        <input
-          className="rounded-lg border bg-black p-2 text-white"
-          placeholder="e.g., Sr. Data Scientist · ML & Interview Prep"
-          value={headline}
-          onChange={(e) => setHeadline(e.target.value)}
-          disabled={!canEdit}
-        />
-
-        <label className="mt-3 text-sm opacity-80">Bio</label>
-        <textarea
-          rows={6}
-          className="rounded-lg border bg-black p-2 text-white"
-          placeholder="Tell mentees what you help with, and your background."
-          value={bio}
-          onChange={(e) => setBio(e.target.value)}
-          disabled={!canEdit}
-        />
-
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+          {/* Headline */}
           <div>
-            <label className="text-sm opacity-80">Hourly Rate (PKR)</label>
+            <label className="block text-sm opacity-80">Headline</label>
+            <input
+              value={headline}
+              onChange={(e) => setHeadline(e.target.value)}
+              placeholder="e.g., Sr. Data Scientist · ML & Interview Prep"
+              className="mt-1 w-full rounded-xl border bg-black p-3"
+              required
+            />
+          </div>
+
+          {/* Bio */}
+          <div>
+            <label className="block text-sm opacity-80">Bio</label>
+            <textarea
+              value={bio}
+              onChange={(e) => setBio(e.target.value)}
+              placeholder="Tell mentees what you help with, and your background."
+              rows={6}
+              className="mt-1 w-full rounded-xl border bg-black p-3"
+              required
+            />
+          </div>
+
+          {/* Links */}
+          <div className="grid gap-3 md:grid-cols-2">
+            <div>
+              <label className="block text-sm opacity-80">LinkedIn URL</label>
+              <input
+                type="url"
+                value={linkedin}
+                onChange={(e) => setLinkedin(e.target.value)}
+                placeholder="https://www.linkedin.com/in/username"
+                className="mt-1 w-full rounded-xl border bg-black p-3"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm opacity-80">Portfolio (optional)</label>
+              <input
+                type="url"
+                value={portfolio}
+                onChange={(e) => setPortfolio(e.target.value)}
+                placeholder="https://your-site.com"
+                className="mt-1 w-full rounded-xl border bg-black p-3"
+              />
+            </div>
+          </div>
+
+          {/* Location */}
+          <div className="grid gap-3 md:grid-cols-2">
+            <div>
+              <label className="block text-sm opacity-80">Country</label>
+              <select
+                value={country}
+                onChange={(e) => setCountry(e.target.value)}
+                className="mt-1 w-full rounded-xl border bg-black p-3"
+                required
+              >
+                <option value="">Select country…</option>
+                {countries.map((c) => (
+                  <option key={c.code} value={c.code}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm opacity-80">City</label>
+              <select
+                value={city}
+                onChange={(e) => setCity(e.target.value)}
+                className="mt-1 w-full rounded-xl border bg-black p-3"
+                required
+                disabled={!country || busyCities}
+              >
+                <option value="">
+                  {busyCities ? "Loading…" : country ? "Select city…" : "Choose country first"}
+                </option>
+                {cities.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* Photo */}
+          <div>
+            <label className="block text-sm opacity-80">
+              Photo (white background, square preferred)
+            </label>
+            <input
+              type="file"
+              accept="image/*"
+              onChange={(e) => setPhotoFile(e.target.files?.[0] ?? null)}
+              className="mt-1 w-full rounded-xl border bg-black p-3 file:mr-3 file:rounded-full file:border file:px-3 file:py-1"
+            />
+            {photoPreview && (
+              <div className="mt-3">
+                <Image
+                  src={photoPreview}
+                  alt="Preview"
+                  width={96}
+                  height={96}
+                  className="rounded-xl border"
+                />
+              </div>
+            )}
+          </div>
+
+          {/* Experience (like LinkedIn) */}
+          <div>
+            <label className="block text-sm opacity-80">Work experience</label>
+            <div className="mt-2 grid gap-4">
+              {roles.map((r, i) => (
+                <div key={i} className="rounded-2xl border p-4">
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <input
+                      placeholder="Title (e.g., Senior Data Scientist)"
+                      value={r.title}
+                      onChange={(e) => updateRole(i, { title: e.target.value })}
+                      className="rounded-xl border bg-black p-3"
+                      required
+                    />
+                    <input
+                      placeholder="Company (e.g., Acme Inc.)"
+                      value={r.company}
+                      onChange={(e) => updateRole(i, { company: e.target.value })}
+                      className="rounded-xl border bg-black p-3"
+                      required
+                    />
+                    <input
+                      type="month"
+                      placeholder="Start"
+                      value={r.start}
+                      onChange={(e) => updateRole(i, { start: e.target.value })}
+                      className="rounded-xl border bg-black p-3"
+                      required
+                    />
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="month"
+                        placeholder="End"
+                        value={r.current ? "" : (r.end || "")}
+                        onChange={(e) => updateRole(i, { end: e.target.value })}
+                        className="w-full rounded-xl border bg-black p-3 disabled:opacity-50"
+                        disabled={r.current}
+                      />
+                      <label className="inline-flex items-center gap-2 text-sm opacity-80">
+                        <input
+                          type="checkbox"
+                          checked={r.current}
+                          onChange={(e) => updateRole(i, { current: e.target.checked })}
+                        />
+                        Current
+                      </label>
+                    </div>
+                  </div>
+                  <textarea
+                    placeholder="Short description (optional)"
+                    value={r.description || ""}
+                    onChange={(e) => updateRole(i, { description: e.target.value })}
+                    className="mt-3 w-full rounded-xl border bg-black p-3"
+                    rows={3}
+                  />
+                  {roles.length > 1 && (
+                    <div className="mt-3">
+                      <button
+                        type="button"
+                        onClick={() => removeRole(i)}
+                        className="rounded-full border px-3 py-1 text-sm hover:shadow"
+                      >
+                        Remove role
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+            <button
+              type="button"
+              onClick={addRole}
+              className="mt-3 rounded-full border px-3 py-1 text-sm hover:shadow"
+            >
+              + Add another role
+            </button>
+          </div>
+
+          {/* Rate */}
+          <div>
+            <label className="block text-sm opacity-80">Hourly rate (PKR)</label>
             <input
               type="number"
+              inputMode="numeric"
               min={0}
-              className="w-full rounded-lg border bg-black p-2 text-white"
-              placeholder="4000"
+              step={100}
               value={rate}
               onChange={(e) => setRate(e.target.value)}
-              disabled={!canEdit}
+              className="mt-1 w-full rounded-xl border bg-black p-3"
+              required
             />
           </div>
+
+          {/* Tags (multi-select from admin options only) */}
           <div>
-            <label className="text-sm opacity-80">Tags (comma-separated)</label>
-            <input
-              className="w-full rounded-lg border bg-black p-2 text-white"
-              placeholder="Data, ML, Interview"
-              value={tagsCsv}
-              onChange={(e) => setTagsCsv(e.target.value)}
-              disabled={!canEdit}
-            />
+            <label className="block text-sm opacity-80">Tags (choose all that apply)</label>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {tags.length === 0 && (
+                <div className="opacity-70">No tags available yet—admin will add these.</div>
+              )}
+              {tags.map((t) => (
+                <label
+                  key={t.id}
+                  className={`cursor-pointer rounded-full border px-3 py-1 text-sm ${
+                    selectedTags.includes(t.id) ? "bg-white/10" : ""
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    className="mr-2"
+                    checked={selectedTags.includes(t.id)}
+                    onChange={() => toggleTag(t.id)}
+                  />
+                  {t.name}
+                </label>
+              ))}
+            </div>
           </div>
-        </div>
 
-        <div className="mt-4 flex gap-3">
-          <button
-            type="submit"
-            disabled={!canEdit}
-            className={`rounded-full border px-4 py-2 transition ${canEdit ? "hover:shadow" : "opacity-60"}`}
-          >
-            {app ? "Save changes" : "Submit application"}
-          </button>
+          {/* Actions */}
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              disabled={disabledSubmit}
+              className="rounded-full border px-4 py-2 opacity-70"
+              title="We’ll enable submit in the next step"
+            >
+              Submit application
+            </button>
+            <Link href="/" className="rounded-full border px-4 py-2 hover:shadow">
+              Go Home
+            </Link>
+          </div>
 
-          <Link href="/" className="rounded-full border px-4 py-2 hover:shadow">
-            Go Home
-          </Link>
-        </div>
-      </form>
+          <p className="text-sm opacity-60">
+            Heads-up: this step sets up the new fields. In the next step, we’ll connect the submit
+            button to Supabase (including photo upload to storage and saving your experience).
+          </p>
+        </form>
+      )}
     </main>
   );
 }
