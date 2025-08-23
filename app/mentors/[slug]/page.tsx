@@ -2,6 +2,7 @@ import Link from "next/link";
 import { createClient } from "@supabase/supabase-js";
 import { notFound } from "next/navigation";
 import type { Mentor } from "@/components/MentorCard";
+import RequestForm from "@/components/RequestForm";
 
 export const revalidate = 60;
 
@@ -95,27 +96,9 @@ export default async function MentorPage({
       <section id="request" className="mt-10 rounded-2xl border p-5">
         <h2 className="text-lg font-semibold">Request Session</h2>
         <p className="mt-1 text-sm opacity-70">
-          Simple request form will be wired in the next step.
+          Submit a request; the mentor will confirm by email.
         </p>
-        <div className="mt-4 grid gap-3 md:grid-cols-2">
-          <input className="rounded-lg border p-2" placeholder="Your name" />
-          <input className="rounded-lg border p-2" placeholder="Email" />
-          <input
-            className="rounded-lg border p-2 md:col-span-2"
-            placeholder="Preferred time (e.g., Sat 6–8pm PKT)"
-          />
-          <textarea
-            className="rounded-lg border p-2 md:col-span-2"
-            rows={4}
-            placeholder="What do you want help with?"
-          ></textarea>
-        </div>
-        <button
-          disabled
-          className="mt-4 rounded-full border px-4 py-2 opacity-60"
-        >
-          Submit (coming next)
-        </button>
+        <RequestForm mentorSlug={m.slug} />
       </section>
     </main>
   );
