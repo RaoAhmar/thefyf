@@ -12,48 +12,36 @@ const supabase = createClient(
 export default async function Home() {
   const { data } = await supabase
     .from("mentors")
-    .select(
-      "id,slug,display_name,headline,rate,tags,location,years_exp"
-    )
-    .order("created_at", { ascending: false }); // newest first
+    .select("id,slug,display_name,headline,rate,tags,location,years_exp")
+    .order("created_at", { ascending: false });
 
   const mentors = (data ?? []) as Mentor[];
 
   return (
     <main className="mx-auto max-w-6xl px-6 py-16">
-      {/* hero */}
       <section className="text-center">
-        <h1 className="text-5xl font-extrabold tracking-tight">
-          Find your fit, faster.
-        </h1>
+        <h1 className="text-5xl font-extrabold tracking-tight">Find your fit, faster.</h1>
         <p className="mt-4 text-lg opacity-80">
           Book mentors for career, data, product and more.
         </p>
 
         <div className="mt-8 flex items-center justify-center gap-3">
-          <Link
-            href="/mentors"
-            className="rounded-full border px-5 py-2 text-base transition hover:shadow"
-          >
+          <Link href="/mentors" className="rounded-full border px-5 py-2 text-base transition hover:shadow">
             Browse mentors
           </Link>
-          <Link
-            href="/apply"
-            className="rounded-full border px-5 py-2 text-base transition hover:shadow"
-          >
-            Apply to mentor
+          <Link href="/apply" className="rounded-full border px-5 py-2 text-base transition hover:shadow">
+            Become a mentor
           </Link>
         </div>
       </section>
 
-      {/* all mentors */}
       <section className="mt-14">
         <div className="flex items-center justify-between">
           <h2 className="text-xl font-semibold">
             {mentors.length ? `Mentors (${mentors.length})` : "Mentors"}
           </h2>
           <Link href="/mentors" className="text-sm underline opacity-80">
-            View directory
+            View all
           </Link>
         </div>
 
