@@ -8,9 +8,16 @@ function isAllowed(email?: string | null) {
   return email ? list.includes(email.toLowerCase()) : false;
 }
 
-export async function PATCH(req: Request, ctx: { params: { id: string } }) {
+export async function PATCH(req: Request, ctx: any) {
   try {
-    const id = ctx.params.id;
+    // Support both Next 14/15 where params may or may not be a Promise
+    const p = ctx?.params;
+    const id =
+      p && typeof p.then === "function" ? (await p).id as string : (p?.id as string);
+
+    if (!id) {
+      return new Response(JSON.stringify({ ok: false, error: "Missing id" }), { status: 400 });
+    }
 
     const auth = req.headers.get("authorization") || "";
     const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
@@ -29,7 +36,7 @@ export async function PATCH(req: Request, ctx: { params: { id: string } }) {
     }
 
     const body = await req.json().catch(() => ({}));
-    const status = (body?.status ?? "").toString().toLowerCase();
+    const status = String(body?.status ?? "").toLowerCase();
 
     if (!["pending", "accepted", "declined"].includes(status)) {
       return new Response(JSON.stringify({ ok: false, error: "Invalid status" }), { status: 400 });
