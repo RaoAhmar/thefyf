@@ -10,7 +10,7 @@ export default function Header() {
   const [signedIn, setSignedIn] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
   const [displayName, setDisplayName] = useState<string | null>(null);
-  const [isMentorApproved, setIsMentorApproved] = useState(false);
+  const [isActiveMentor, setIsActiveMentor] = useState(false);
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
 
@@ -20,9 +20,9 @@ export default function Header() {
     async function run() {
       const { data } = await supabaseBrowser.auth.getSession();
       const s = data.session;
-      if (s) setSignedIn(true);
-
       if (!s) return;
+
+      if (!abort) setSignedIn(true);
 
       try {
         const res = await fetch("/api/me/role", {
@@ -32,7 +32,7 @@ export default function Header() {
         if (!abort && res.ok && json.ok) {
           setIsAdmin(!!json.isAdmin);
           setDisplayName(json.displayName || (json.email ? json.email.split("@")[0] : null));
-          setIsMentorApproved(!!json.isMentorApproved);
+          setIsActiveMentor(!!json.isActiveMentor);
         }
       } catch {
         /* ignore */
@@ -75,36 +75,41 @@ export default function Header() {
   return (
     <header className="mx-auto max-w-6xl px-6 py-4">
       <div className="flex items-center justify-between border-b pb-3">
-        <div className="flex items-center gap-5">
+        <div className="flex items-center gap-4">
           <Link href="/" className="text-lg font-semibold tracking-tight">
             Find your Fit
           </Link>
-          <Link href="/about" className="opacity-80 hover:opacity-100">
-            About us
-          </Link>
+          {/* Step 5 will add About Us link here */}
         </div>
 
         <nav className="flex items-center gap-4">
-          {/* Show exactly ONE of these: */}
-          {isMentorApproved ? (
-            <Link href="/mentor" className="rounded-full border px-3 py-1 transition hover:shadow">
+          {/* Show ONE of these: Become a mentor OR Mentor dashboard */}
+          {isActiveMentor ? (
+            <Link
+              href="/mentor"
+              className="rounded-full border px-3 py-1 transition hover:shadow"
+            >
               Mentor
             </Link>
           ) : (
-            <Link href="/apply" className="rounded-full border px-3 py-1 transition hover:shadow">
-              Become a mentor
-            </Link>
+            <Link href="/apply">Become a mentor</Link>
           )}
 
           {isAdmin && (
-            <Link href="/admin/apps" className="rounded-full border px-3 py-1 transition hover:shadow">
+            <Link
+              href="/admin/apps"
+              className="rounded-full border px-3 py-1 transition hover:shadow"
+            >
               Admin
             </Link>
           )}
 
           {/* Auth control: sign in OR name with dropdown */}
           {!signedIn ? (
-            <Link href="/auth" className="rounded-full border px-3 py-1 transition hover:shadow">
+            <Link
+              href="/auth"
+              className="rounded-full border px-3 py-1 transition hover:shadow"
+            >
               Sign in
             </Link>
           ) : (
@@ -119,8 +124,12 @@ export default function Header() {
               >
                 {displayName ?? "Account"}
               </button>
+
               {open && (
-                <div role="menu" className="absolute right-0 z-50 mt-2 w-44 rounded-xl border bg-black p-1 shadow-lg">
+                <div
+                  role="menu"
+                  className="absolute right-0 z-50 mt-2 w-44 rounded-xl border bg-black p-1 shadow-lg"
+                >
                   <button
                     role="menuitem"
                     onClick={handleSignOut}
