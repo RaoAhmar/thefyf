@@ -8,28 +8,29 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
-type SearchParams =
-  | Promise<Record<string, string | string[] | undefined>>
-  | Record<string, string | string[] | undefined>
-  | undefined;
+// Next 14/15 compatible searchParams typing (no `any`)
+type SP = Record<string, string | string[] | undefined>;
+type SPInput = Promise<SP> | SP | undefined;
 
-export default async function MentorsPage(props: { searchParams?: SearchParams }) {
-  // Normalize Next.js 14/15 shape (object or Promise)
-  const sp =
-    props.searchParams &&
-    typeof (props.searchParams as any).then === "function"
-      ? await (props.searchParams as Promise<Record<string, string | string[] | undefined>>)
-      : ((props.searchParams as Record<string, string | string[] | undefined>) || {});
+export default async function MentorsPage({ searchParams }: { searchParams?: SPInput }) {
+  let sp: SP = {};
 
-  const rawQ = Array.isArray(sp?.q) ? sp.q[0] : sp?.q;
-  const q = (rawQ ?? "").toString().trim();
+  if (searchParams && typeof searchParams === "object" && "then" in searchParams) {
+    // it's a Promise<SP>
+    sp = await (searchParams as Promise<SP>);
+  } else {
+    // it's SP | undefined
+    sp = (searchParams as SP) ?? {};
+  }
+
+  const rawQ = sp.q;
+  const q = (Array.isArray(rawQ) ? rawQ[0] : rawQ ?? "").toString().trim();
 
   let query = supabase
     .from("mentors")
     .select("id,slug,display_name,headline,rate,tags,location,years_exp")
     .order("created_at", { ascending: false });
 
-  // Basic keyword search
   if (q) {
     query = query.or(
       `display_name.ilike.%${q}%,headline.ilike.%${q}%,location.ilike.%${q}%`
