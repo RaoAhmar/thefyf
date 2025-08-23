@@ -71,7 +71,6 @@ export async function PATCH(req, ctx) {
       let candidate = base;
       let n = 0;
       // ensure slug unique
-      // eslint-disable-next-line no-constant-condition
       while (true) {
         const { data: rows } = await supabaseAdmin
           .from("mentors")
