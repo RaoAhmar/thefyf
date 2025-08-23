@@ -12,56 +12,62 @@ const supabase = createClient(
 export default async function Home() {
   const { data } = await supabase
     .from("mentors")
-    .select("id,slug,display_name,headline,rate,tags,location,years_exp")
-    .limit(6);
+    .select(
+      "id,slug,display_name,headline,rate,tags,location,years_exp"
+    )
+    .order("created_at", { ascending: false }); // newest first
 
   const mentors = (data ?? []) as Mentor[];
 
   return (
-    <main className="mx-auto max-w-6xl px-6 py-6">
-      {/* Simple top nav with Sign in */}
-      <header className="flex items-center justify-between border-b pb-4">
-        <Link href="/" className="text-lg font-semibold tracking-tight">
-          Find your Fit
-        </Link>
-        <nav className="flex items-center gap-4">
-          <Link href="/mentors">Mentors</Link>
-          <Link
-            href="/auth"
-            className="rounded-full border px-3 py-1 transition hover:shadow"
-          >
-            Sign in
-          </Link>
-        </nav>
-      </header>
-
-      <section className="py-16 text-center">
-        <h1 className="text-4xl font-bold">Find your fit, faster.</h1>
-        <p className="mt-3 opacity-70">
+    <main className="mx-auto max-w-6xl px-6 py-16">
+      {/* hero */}
+      <section className="text-center">
+        <h1 className="text-5xl font-extrabold tracking-tight">
+          Find your fit, faster.
+        </h1>
+        <p className="mt-4 text-lg opacity-80">
           Book mentors for career, data, product and more.
         </p>
-        <div className="mt-6">
+
+        <div className="mt-8 flex items-center justify-center gap-3">
           <Link
             href="/mentors"
-            className="rounded-full border px-4 py-2 transition hover:shadow-md"
+            className="rounded-full border px-5 py-2 text-base transition hover:shadow"
           >
             Browse mentors
+          </Link>
+          <Link
+            href="/apply"
+            className="rounded-full border px-5 py-2 text-base transition hover:shadow"
+          >
+            Apply to mentor
           </Link>
         </div>
       </section>
 
-      <section>
+      {/* all mentors */}
+      <section className="mt-14">
         <div className="flex items-center justify-between">
-          <h2 className="text-xl font-semibold">Featured mentors</h2>
+          <h2 className="text-xl font-semibold">
+            {mentors.length ? `Mentors (${mentors.length})` : "Mentors"}
+          </h2>
           <Link href="/mentors" className="text-sm underline opacity-80">
-            View all
+            View directory
           </Link>
         </div>
-        <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {mentors.map((m) => (
-            <MentorCard key={m.id} m={m} />
-          ))}
-        </div>
+
+        {mentors.length === 0 ? (
+          <div className="mt-6 rounded-2xl border p-6 text-center opacity-70">
+            No mentors yet — check back soon.
+          </div>
+        ) : (
+          <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {mentors.map((m) => (
+              <MentorCard key={m.id} m={m} />
+            ))}
+          </div>
+        )}
       </section>
     </main>
   );
