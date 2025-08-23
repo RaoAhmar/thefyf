@@ -20,7 +20,7 @@ async function getMentor(slug: string) {
     )
     .eq("slug", slug)
     .single();
-  return data as MentorWithBio | null;
+  return (data as MentorWithBio) ?? null;
 }
 
 export async function generateStaticParams() {
@@ -68,4 +68,55 @@ export default async function MentorPage({
           <div className="text-right">
             <div className="text-xl font-semibold">PKR {m.rate}/hr</div>
             <a
-              href="
+              href="#request"
+              className="mt-2 inline-block rounded-full border px-4 py-2 transition hover:shadow"
+            >
+              Request session
+            </a>
+          </div>
+        )}
+      </header>
+
+      {m.tags && m.tags.length > 0 && (
+        <div className="mt-6 flex flex-wrap gap-2">
+          {m.tags.map((t) => (
+            <span
+              key={t}
+              className="rounded-full border px-2 py-0.5 text-xs opacity-80"
+            >
+              {t}
+            </span>
+          ))}
+        </div>
+      )}
+
+      {m.bio && <div className="mt-8 whitespace-pre-line text-sm">{m.bio}</div>}
+
+      <section id="request" className="mt-10 rounded-2xl border p-5">
+        <h2 className="text-lg font-semibold">Request Session</h2>
+        <p className="mt-1 text-sm opacity-70">
+          Simple request form will be wired in the next step.
+        </p>
+        <div className="mt-4 grid gap-3 md:grid-cols-2">
+          <input className="rounded-lg border p-2" placeholder="Your name" />
+          <input className="rounded-lg border p-2" placeholder="Email" />
+          <input
+            className="rounded-lg border p-2 md:col-span-2"
+            placeholder="Preferred time (e.g., Sat 6–8pm PKT)"
+          />
+          <textarea
+            className="rounded-lg border p-2 md:col-span-2"
+            rows={4}
+            placeholder="What do you want help with?"
+          ></textarea>
+        </div>
+        <button
+          disabled
+          className="mt-4 rounded-full border px-4 py-2 opacity-60"
+        >
+          Submit (coming next)
+        </button>
+      </section>
+    </main>
+  );
+}
