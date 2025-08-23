@@ -12,15 +12,29 @@ const supabase = createClient(
 export default async function Home() {
   const { data } = await supabase
     .from("mentors")
-    .select(
-      "id,slug,display_name,headline,rate,tags,location,years_exp"
-    )
+    .select("id,slug,display_name,headline,rate,tags,location,years_exp")
     .limit(6);
 
   const mentors = (data ?? []) as Mentor[];
 
   return (
-    <main className="mx-auto max-w-6xl px-6 py-10">
+    <main className="mx-auto max-w-6xl px-6 py-6">
+      {/* Simple top nav with Sign in */}
+      <header className="flex items-center justify-between border-b pb-4">
+        <Link href="/" className="text-lg font-semibold tracking-tight">
+          Find your Fit
+        </Link>
+        <nav className="flex items-center gap-4">
+          <Link href="/mentors">Mentors</Link>
+          <Link
+            href="/auth"
+            className="rounded-full border px-3 py-1 transition hover:shadow"
+          >
+            Sign in
+          </Link>
+        </nav>
+      </header>
+
       <section className="py-16 text-center">
         <h1 className="text-4xl font-bold">Find your fit, faster.</h1>
         <p className="mt-3 opacity-70">
