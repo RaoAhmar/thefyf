@@ -16,29 +16,32 @@ type Body = {
   bio: string;
   linkedin: string;
   portfolio?: string | null;
-  country: string; // ISO code e.g. "PK"
+  country: string;
   city: string;
   photoUrl?: string | null;
   rate: number;
   roles: Role[];
-  tagIds: string[]; // admin-controlled tag_options IDs
+  tagIds: string[];
 };
 
 export async function POST(req: Request) {
   try {
-    // auth
     const auth = req.headers.get("authorization") || "";
     const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
-    if (!token) return new Response(JSON.stringify({ ok: false, error: "no_token" }), { status: 401 });
+    if (!token) {
+      return new Response(JSON.stringify({ ok: false, error: "no_token" }), { status: 401 });
+    }
 
     const { data: u, error: ue } = await supabaseAdmin.auth.getUser(token);
-    if (ue || !u?.user) return new Response(JSON.stringify({ ok: false, error: "bad_token" }), { status: 401 });
+    if (ue || !u?.user) {
+      return new Response(JSON.stringify({ ok: false, error: "bad_token", detail: ue?.message }), {
+        status: 401,
+      });
+    }
     const uid = u.user.id;
 
-    // input
     const body: Body = (await req.json()) as Body;
 
-    // minimal validation
     if (
       !body.first?.trim() ||
       !body.last?.trim() ||
@@ -60,12 +63,17 @@ export async function POST(req: Request) {
         .select("name")
         .in("id", tagIds)
         .eq("active", true);
-      if (tagErr) return new Response(JSON.stringify({ ok: false, error: "tags_lookup_failed" }), { status: 500 });
+      if (tagErr) {
+        return new Response(
+          JSON.stringify({ ok: false, error: "tags_lookup_failed", detail: tagErr.message }),
+          { status: 500 }
+        );
+      }
       tagNames = (tags || []).map((t) => String(t.name));
     }
 
-    // compose
     const displayName = `${body.first.trim()} ${body.last.trim()}`.trim();
+
     const payload = {
       user_id: uid,
       display_name: displayName,
@@ -79,12 +87,11 @@ export async function POST(req: Request) {
       city: body.city.trim(),
       photo_url: body.photoUrl || null,
       rate: Number(body.rate) || 0,
-      tags: tagNames, // stored as text[] but from admin list only
-      experience: body.roles ?? [],
-      status: "pending" as const,
+      tags: tagNames,          // text[] from admin options only
+      experience: body.roles,  // jsonb
+      status: "pending" as const, // <-- if this column doesn't exist, we'll see it in error below
     };
 
-    // insert application
     const { data: row, error: insErr } = await supabaseAdmin
       .from("mentor_applications")
       .insert(payload)
@@ -92,14 +99,31 @@ export async function POST(req: Request) {
       .single();
 
     if (insErr) {
-      return new Response(JSON.stringify({ ok: false, error: "insert_failed" }), { status: 500 });
+      return new Response(
+        JSON.stringify({
+          ok: false,
+          error: "insert_failed",
+          code: insErr.code,
+          detail: insErr.message,
+          hint: (insErr as any).hint ?? null,
+          payloadKeys: Object.keys(payload),
+        }),
+        { status: 500 }
+      );
     }
 
     return new Response(JSON.stringify({ ok: true, id: row?.id, status: row?.status }), {
       status: 200,
       headers: { "content-type": "application/json" },
     });
-  } catch {
-    return new Response(JSON.stringify({ ok: false, error: "server_error" }), { status: 500 });
+  } catch (e: unknown) {
+    return new Response(
+      JSON.stringify({
+        ok: false,
+        error: "server_error",
+        detail: e instanceof Error ? e.message : String(e),
+      }),
+      { status: 500 }
+    );
   }
 }
