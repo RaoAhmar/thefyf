@@ -79,7 +79,9 @@ export default function Header() {
           <Link href="/" className="text-lg font-semibold tracking-tight">
             Find your Fit
           </Link>
-          {/* Step 5 will add About Us link here */}
+          <Link href="/about" className="opacity-90 hover:underline">
+            About us
+          </Link>
         </div>
 
         <nav className="flex items-center gap-4">
