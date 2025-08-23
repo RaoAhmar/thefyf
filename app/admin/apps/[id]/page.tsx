@@ -34,14 +34,12 @@ type App = {
 };
 
 async function getApp(id: string) {
-  const { data, error } = await supabaseAdmin
+  const { data } = await supabaseAdmin
     .from("mentor_applications")
     .select("*")
     .eq("id", id)
     .single();
-
-  if (error || !data) return null;
-  return data as App;
+  return (data ?? null) as App | null;
 }
 
 export default async function Page({ params }: { params: { id: string } }) {
@@ -59,6 +57,11 @@ export default async function Page({ params }: { params: { id: string } }) {
     );
   }
 
+  // Fix: compute name separately to avoid ?? with || precedence issues
+  const computedName =
+    app.display_name ?? `${app.first_name ?? ""} ${app.last_name ?? ""}`.trim();
+  const safeName = computedName || "—";
+
   return (
     <main className="mx-auto max-w-4xl px-6 py-10">
       <div className="flex items-center justify-between">
@@ -73,7 +76,7 @@ export default async function Page({ params }: { params: { id: string } }) {
           {app.photo_url ? (
             <Image
               src={app.photo_url}
-              alt={app.display_name ?? "Photo"}
+              alt={safeName}
               width={128}
               height={128}
               className="rounded-xl border object-cover"
@@ -87,9 +90,7 @@ export default async function Page({ params }: { params: { id: string } }) {
         </div>
 
         <div>
-          <div className="text-2xl font-semibold">
-            {app.display_name ?? `${app.first_name ?? ""} ${app.last_name ?? ""}`.trim() || "—"}
-          </div>
+          <div className="text-2xl font-semibold">{safeName}</div>
           <div className="mt-1 opacity-70">User ID: {app.user_id}</div>
           <div className="mt-3 text-lg">{app.headline || "—"}</div>
           <div className="mt-2 opacity-80">
@@ -102,6 +103,7 @@ export default async function Page({ params }: { params: { id: string } }) {
                 {t}
               </span>
             ))}
+            {(!app.tags || app.tags.length === 0) && <span className="opacity-60">—</span>}
           </div>
 
           <div className="mt-3 font-medium">
@@ -149,7 +151,9 @@ export default async function Page({ params }: { params: { id: string } }) {
                 {r.company || "—"} · {r.start || "—"}
                 {r.current ? " – Present" : r.end ? ` – ${r.end}` : ""}
               </div>
-              {r.description && <div className="mt-2 whitespace-pre-wrap opacity-90">{r.description}</div>}
+              {r.description && (
+                <div className="mt-2 whitespace-pre-wrap opacity-90">{r.description}</div>
+              )}
             </div>
           ))}
         </div>
@@ -167,7 +171,15 @@ export default async function Page({ params }: { params: { id: string } }) {
   );
 }
 
-function AdminAction({ id, action, label }: { id: string; action: "approve" | "decline" | "suspend" | "block"; label: string }) {
+function AdminAction({
+  id,
+  action,
+  label,
+}: {
+  id: string;
+  action: "approve" | "decline" | "suspend" | "block";
+  label: string;
+}) {
   return (
     <form action={`/api/admin/apps/${id}/status`} method="post" className="inline">
       <input type="hidden" name="action" value={action} />
