@@ -8,12 +8,18 @@ function isAllowed(email?: string | null) {
   return email ? list.includes(email.toLowerCase()) : false;
 }
 
-export async function PATCH(req: Request, ctx: any) {
+type Params = { id: string };
+type Ctx = { params: Params | Promise<Params> };
+
+function isPromise<T>(val: unknown): val is Promise<T> {
+  return !!val && typeof val === "object" && typeof (val as { then?: unknown }).then === "function";
+}
+
+export async function PATCH(req: Request, ctx: Ctx) {
   try {
-    // Support both Next 14/15 where params may or may not be a Promise
-    const p = ctx?.params;
-    const id =
-      p && typeof p.then === "function" ? (await p).id as string : (p?.id as string);
+    const p = ctx.params;
+    const params = isPromise<Params>(p) ? await p : p;
+    const id = params?.id;
 
     if (!id) {
       return new Response(JSON.stringify({ ok: false, error: "Missing id" }), { status: 400 });
@@ -35,7 +41,7 @@ export async function PATCH(req: Request, ctx: any) {
       return new Response(JSON.stringify({ ok: false, error: "Forbidden" }), { status: 403 });
     }
 
-    const body = await req.json().catch(() => ({}));
+    const body = await req.json().catch(() => ({} as { status?: string }));
     const status = String(body?.status ?? "").toLowerCase();
 
     if (!["pending", "accepted", "declined"].includes(status)) {
