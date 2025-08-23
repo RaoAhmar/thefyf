@@ -8,19 +8,28 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
-export default async function MentorsPage({
-  searchParams,
-}: {
-  searchParams?: { q?: string };
-}) {
-  const q = (searchParams?.q || "").trim();
+type SearchParams =
+  | Promise<Record<string, string | string[] | undefined>>
+  | Record<string, string | string[] | undefined>
+  | undefined;
+
+export default async function MentorsPage(props: { searchParams?: SearchParams }) {
+  // Normalize Next.js 14/15 shape (object or Promise)
+  const sp =
+    props.searchParams &&
+    typeof (props.searchParams as any).then === "function"
+      ? await (props.searchParams as Promise<Record<string, string | string[] | undefined>>)
+      : ((props.searchParams as Record<string, string | string[] | undefined>) || {});
+
+  const rawQ = Array.isArray(sp?.q) ? sp.q[0] : sp?.q;
+  const q = (rawQ ?? "").toString().trim();
 
   let query = supabase
     .from("mentors")
     .select("id,slug,display_name,headline,rate,tags,location,years_exp")
     .order("created_at", { ascending: false });
 
-  // Basic keyword search across a few text columns
+  // Basic keyword search
   if (q) {
     query = query.or(
       `display_name.ilike.%${q}%,headline.ilike.%${q}%,location.ilike.%${q}%`
