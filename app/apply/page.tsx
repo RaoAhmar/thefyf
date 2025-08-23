@@ -119,7 +119,7 @@ export default function ApplyPage() {
 
       if (apps && apps[0]) setApp(apps[0] as AppRow);
       alert("Application saved.");
-    } catch (e) {
+    } catch {
       alert("Could not save your application. Please try again.");
     } finally {
       setLoading(false);
@@ -141,13 +141,8 @@ export default function ApplyPage() {
     return (
       <main className="mx-auto max-w-3xl px-6 py-10">
         <h1 className="text-3xl font-bold">Apply to become a mentor</h1>
-        <p className="mt-2 opacity-70">
-          Please sign in to submit an application.
-        </p>
-        <Link
-          href="/auth"
-          className="mt-4 inline-block rounded-full border px-4 py-2 hover:shadow"
-        >
+        <p className="mt-2 opacity-70">Please sign in to submit an application.</p>
+        <Link href="/auth" className="mt-4 inline-block rounded-full border px-4 py-2 hover:shadow">
           Sign in
         </Link>
       </main>
@@ -164,12 +159,9 @@ export default function ApplyPage() {
       {approved && (
         <div className="mt-6 rounded-2xl border p-4">
           <div className="text-green-400">
-            Your application is approved. You’ll soon get access to the mentor
-            tools.
+            Your application is approved. You’ll soon get access to the mentor tools.
           </div>
-          <div className="mt-2 text-sm opacity-70">
-            You can still view your submitted info below.
-          </div>
+          <div className="mt-2 text-sm opacity-70">You can still view your submitted info below.</div>
         </div>
       )}
 
@@ -183,12 +175,8 @@ export default function ApplyPage() {
 
       {pending && (
         <div className="mt-6 rounded-2xl border p-4">
-          <div className="text-yellow-300">
-            Your application is pending review.
-          </div>
-          <div className="mt-2 text-sm opacity-70">
-            You can edit it until a decision is made.
-          </div>
+          <div className="text-yellow-300">Your application is pending review.</div>
+          <div className="mt-2 text-sm opacity-70">You can edit it until a decision is made.</div>
         </div>
       )}
 
@@ -241,9 +229,7 @@ export default function ApplyPage() {
           <button
             type="submit"
             disabled={!canEdit}
-            className={`rounded-full border px-4 py-2 transition ${
-              canEdit ? "hover:shadow" : "opacity-60"
-            }`}
+            className={`rounded-full border px-4 py-2 transition ${canEdit ? "hover:shadow" : "opacity-60"}`}
           >
             {app ? "Save changes" : "Submit application"}
           </button>
