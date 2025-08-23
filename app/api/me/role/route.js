@@ -22,7 +22,7 @@ export async function GET(req) {
     const email = userData.user.email ?? null;
     const { data: prof } = await supabaseAdmin
       .from("profiles")
-      .select("role")
+      .select("role, display_name")
       .eq("id", userData.user.id)
       .single();
 
@@ -32,6 +32,7 @@ export async function GET(req) {
         signedIn: true,
         email,
         role: prof?.role || "mentee",
+        displayName: prof?.display_name || (email ? email.split("@")[0] : null),
         isAdmin: isAllowed(email),
       }),
       { status: 200, headers: { "content-type": "application/json" } }
