@@ -1,9 +1,8 @@
 import { supabaseAdmin } from "@/lib/supabaseServer";
-import type { PostgrestError } from "@supabase/supabase-js";
 
 type Resp =
   | { ok: true; state: "approved" | "pending" | "declined" | "suspended" | "blocked" | "none" }
-  | { ok: false; error: string; code?: string; detail?: string | null };
+  | { ok: false; error: string; detail?: string | null };
 
 export async function GET(req: Request) {
   try {
@@ -12,6 +11,7 @@ export async function GET(req: Request) {
     if (!token) {
       return new Response(JSON.stringify({ ok: false, error: "no_token" } satisfies Resp), {
         status: 401,
+        headers: { "content-type": "application/json" },
       });
     }
 
@@ -19,12 +19,8 @@ export async function GET(req: Request) {
     const { data: u, error: ue } = await supabaseAdmin.auth.getUser(token);
     if (ue || !u?.user) {
       return new Response(
-        JSON.stringify({
-          ok: false,
-          error: "bad_token",
-          detail: ue?.message ?? null,
-        } satisfies Resp),
-        { status: 401 }
+        JSON.stringify({ ok: false, error: "bad_token", detail: ue?.message ?? null } satisfies Resp),
+        { status: 401, headers: { "content-type": "application/json" } }
       );
     }
     const uid = u.user.id;
@@ -39,10 +35,11 @@ export async function GET(req: Request) {
     if (mentorQ.data) {
       return new Response(JSON.stringify({ ok: true, state: "approved" } satisfies Resp), {
         status: 200,
+        headers: { "content-type": "application/json" },
       });
     }
 
-    // Else check the latest application for this user
+    // Else check latest application status
     const appQ = await supabaseAdmin
       .from("mentor_applications")
       .select("status, created_at")
@@ -54,17 +51,23 @@ export async function GET(req: Request) {
     if (appQ.data?.status) {
       const s = String(appQ.data.status).toLowerCase();
       if (s === "pending" || s === "declined" || s === "suspended" || s === "blocked") {
-        return new Response(JSON.stringify({ ok: true, state: s } as Resp), { status: 200 });
+        return new Response(JSON.stringify({ ok: true, state: s } as Resp), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
       }
     }
 
     // No application found
-    return new Response(JSON.stringify({ ok: true, state: "none" } satisfies Resp), { status: 200 });
+    return new Response(JSON.stringify({ ok: true, state: "none" } satisfies Resp), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
   } catch (e) {
     const detail = e instanceof Error ? e.message : String(e);
-    return new Response(
-      JSON.stringify({ ok: false, error: "server_error", detail } satisfies Resp),
-      { status: 500 }
-    );
+    return new Response(JSON.stringify({ ok: false, error: "server_error", detail } satisfies Resp), {
+      status: 500,
+      headers: { "content-type": "application/json" },
+    });
   }
 }
