@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import MentorCard, { Mentor } from "@/components/MentorCard";
+import SearchHero from "@/components/SearchHero";
 
 export const revalidate = 60;
 
@@ -8,62 +9,78 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
-// Next 14/15 compatible searchParams typing (no `any`)
-type SP = Record<string, string | string[] | undefined>;
-type SPInput = Promise<SP> | SP | undefined;
+// Next.js 15: searchParams is a Promise
+type SearchParams = Promise<{ q?: string | string[] | undefined }>;
 
-export default async function MentorsPage({ searchParams }: { searchParams?: SPInput }) {
-  let sp: SP = {};
-
-  if (searchParams && typeof searchParams === "object" && "then" in searchParams) {
-    // it's a Promise<SP>
-    sp = await (searchParams as Promise<SP>);
-  } else {
-    // it's SP | undefined
-    sp = (searchParams as SP) ?? {};
-  }
-
-  const rawQ = sp.q;
-  const q = (Array.isArray(rawQ) ? rawQ[0] : rawQ ?? "").toString().trim();
+export default async function MentorsPage({
+  searchParams,
+}: {
+  searchParams: SearchParams;
+}) {
+  const params = await searchParams;
+  const qRaw = params?.q;
+  const q = Array.isArray(qRaw) ? qRaw[0] : qRaw;
 
   let query = supabase
     .from("mentors")
-    .select("id,slug,display_name,headline,rate,tags,location,years_exp")
+    .select(
+      "id,slug,display_name,headline,rate,tags,location,years_exp"
+    )
     .order("created_at", { ascending: false });
 
-  if (q) {
+  if (q && q.trim()) {
+    const s = `%${q.trim()}%`;
+    // simple multi-field search
     query = query.or(
-      `display_name.ilike.%${q}%,headline.ilike.%${q}%,location.ilike.%${q}%`
+      `display_name.ilike.${s},headline.ilike.${s},location.ilike.${s}`
     );
   }
 
-  const { data } = await query;
+  const { data, error } = await query;
   const mentors = (data ?? []) as Mentor[];
 
   return (
-    <main className="mx-auto max-w-6xl px-6 py-10">
-      <h1 className="text-2xl font-semibold">Mentors</h1>
+    <main className="mx-auto max-w-6xl px-6 py-12">
+      <h1 className="text-3xl font-bold">Mentors</h1>
+      <p className="mt-2 opacity-70">
+        {q ? (
+          <>
+            Showing results for <span className="font-mono">"{q}"</span>
+          </>
+        ) : (
+          <>Browse all mentors.</>
+        )}
+      </p>
 
-      <form action="/mentors" method="get" className="mt-4 max-w-xl">
-        <div className="flex overflow-hidden rounded-2xl border">
-          <input
-            name="q"
-            defaultValue={q}
-            placeholder="Search mentors…"
-            className="flex-1 bg-black px-4 py-3 text-white outline-none"
-          />
-          <button className="px-5 py-3 border-l hover:shadow">Search</button>
-        </div>
-      </form>
+      <div className="mt-6">
+        <SearchHero />
+      </div>
 
-      {mentors.length === 0 ? (
-        <div className="mt-8 rounded-2xl border p-6 opacity-70">No mentors found.</div>
-      ) : (
-        <div className="mt-8 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {mentors.map((m) => (
-            <MentorCard key={m.id} m={m} />
-          ))}
+      {error && (
+        <div className="mt-6 rounded-2xl border p-4 text-red-400">
+          Failed to load mentors. Please try again.
         </div>
+      )}
+
+      {!error && (
+        <>
+          <div className="mt-6 text-sm opacity-70">
+            {mentors.length} result{mentors.length === 1 ? "" : "s"}
+            {q ? " found" : ""}
+          </div>
+
+          {mentors.length === 0 ? (
+            <div className="mt-6 rounded-2xl border p-6 text-center opacity-70">
+              No mentors match your search.
+            </div>
+          ) : (
+            <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+              {mentors.map((m) => (
+                <MentorCard key={m.id} m={m} />
+              ))}
+            </div>
+          )}
+        </>
       )}
     </main>
   );
