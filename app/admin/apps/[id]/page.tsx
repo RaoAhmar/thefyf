@@ -42,8 +42,15 @@ async function getApp(id: string) {
   return (data ?? null) as App | null;
 }
 
-export default async function Page({ params }: { params: { id: string } }) {
-  const app = await getApp(params.id);
+export default async function Page({
+  params,
+}: {
+  // Next.js 15: params is a Promise
+  params: Promise<{ id: string }>;
+}) {
+  const { id } = await params;
+
+  const app = await getApp(id);
   if (!app) {
     return (
       <main className="mx-auto max-w-4xl px-6 py-10">
@@ -57,7 +64,7 @@ export default async function Page({ params }: { params: { id: string } }) {
     );
   }
 
-  // Fix: compute name separately to avoid ?? with || precedence issues
+  // Compute name safely (avoid ?? mixed with || precedence)
   const computedName =
     app.display_name ?? `${app.first_name ?? ""} ${app.last_name ?? ""}`.trim();
   const safeName = computedName || "—";
