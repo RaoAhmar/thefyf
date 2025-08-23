@@ -18,13 +18,15 @@ type AppRow = {
   photo_url: string | null;
   rate: number | null;
   tags: string[] | null;
-  experience: {
-    title?: string;
-    company?: string;
-    start?: string; // YYYY-MM
-    end?: string | null; // YYYY-MM
-    current?: boolean;
-  }[] | null;
+  experience:
+    | {
+        title?: string;
+        company?: string;
+        start?: string; // YYYY-MM
+        end?: string | null; // YYYY-MM
+        current?: boolean;
+      }[]
+    | null;
   status: string;
 };
 
@@ -49,17 +51,24 @@ function calcYearsExp(roles: AppRow["experience"]): number {
   const now = new Date();
   for (const r of roles) {
     if (!r?.start) continue;
-    const [sy, sm] = r.start.split("-").map((n) => parseInt(n || "1", 10));
+    const [syStr, smStr] = r.start.split("-");
+    const sy = parseInt(syStr || "0", 10);
+    const sm = parseInt(smStr || "1", 10);
+    if (!sy) continue;
     const s = new Date(sy, (sm || 1) - 1, 1);
+
     let e: Date;
     if (r.current) {
       e = now;
     } else if (r.end) {
-      const [ey, em] = r.end.split("-").map((n) => parseInt(n || "1", 10));
-      e = new Date(ey, (em || 1) - 1, 1);
+      const [eyStr, emStr] = r.end.split("-");
+      const ey = parseInt(eyStr || "0", 10);
+      const em = parseInt(emStr || "1", 10);
+      e = ey ? new Date(ey, (em || 1) - 1, 1) : s;
     } else {
       e = s;
     }
+
     const diff = (e.getFullYear() - s.getFullYear()) * 12 + (e.getMonth() - s.getMonth());
     if (diff > 0) months += diff;
   }
@@ -68,7 +77,6 @@ function calcYearsExp(roles: AppRow["experience"]): number {
 
 async function ensureUniqueSlug(base: string) {
   let candidate = slugify(base) || "mentor";
-  // if slug exists, append short suffix until unique
   for (let i = 0; i < 6; i++) {
     const { data } = await supabaseAdmin
       .from("mentors")
@@ -83,10 +91,9 @@ async function ensureUniqueSlug(base: string) {
 }
 
 async function approve(app: AppRow) {
-  const displayName =
-    app.display_name ??
-    `${app.first_name ?? ""} ${app.last_name ?? ""}`.trim() ||
-    "Mentor";
+  // compute display name without mixing ?? and ||
+  const nameFromParts = `${app.first_name ?? ""} ${app.last_name ?? ""}`.trim();
+  const displayName = (app.display_name ?? nameFromParts) || "Mentor";
 
   const slug = await ensureUniqueSlug(displayName);
   const years = calcYearsExp(app.experience ?? []);
@@ -98,11 +105,9 @@ async function approve(app: AppRow) {
     .select("id")
     .eq("user_id", app.user_id)
     .maybeSingle();
-
   if (existing.error) return existing;
 
   if (existing.data) {
-    // update existing mentor row
     return await supabaseAdmin
       .from("mentors")
       .update({
@@ -118,7 +123,6 @@ async function approve(app: AppRow) {
       .select("id")
       .single();
   } else {
-    // insert new mentor row
     return await supabaseAdmin
       .from("mentors")
       .insert({
@@ -146,7 +150,7 @@ async function setApplicationStatus(id: string, status: string) {
 }
 
 async function handleAction(id: string, action: Action) {
-  // load application
+  // Load application
   const { data: app, error: loadErr } = await supabaseAdmin
     .from("mentor_applications")
     .select("*")
@@ -174,7 +178,7 @@ async function handleAction(id: string, action: Action) {
     return json({ ok: true, action: "approve" });
   }
 
-  // other status changes (no mentor record modifications)
+  // Other status changes
   const map: Record<Action, string> = {
     approve: "approved",
     decline: "declined",
@@ -189,9 +193,8 @@ async function handleAction(id: string, action: Action) {
   return json({ ok: true, action });
 }
 
-/* -------- Route handlers -------- */
+/* ---------------- Route handlers ---------------- */
 
-// PATCH: JSON body { action }
 export async function PATCH(
   req: Request,
   ctx: { params: Promise<{ id: string }> }
@@ -207,10 +210,9 @@ export async function PATCH(
   if (!action || !["approve", "decline", "suspend", "block"].includes(action)) {
     return json({ ok: false, error: "invalid_action" }, 400);
   }
-  return handleAction(id, action as Action);
+  return handleAction(id, action);
 }
 
-// POST: from <form> with FormData (action=<...>) OR JSON
 export async function POST(
   req: Request,
   ctx: { params: Promise<{ id: string }> }
