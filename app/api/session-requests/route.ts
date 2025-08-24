@@ -1,46 +1,71 @@
-import { supabaseAdmin } from "@/lib/supabaseServer";
+// app/api/session-requests/route.ts
+import { NextResponse } from 'next/server';
+import { createClient } from '@supabase/supabase-js';
+
+export const runtime = 'nodejs';             // service key requires Node runtime
+export const dynamic = 'force-dynamic';      // avoid static optimization
+
+const supabaseAdmin = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!,    // SERVER-ONLY secret
+  { auth: { persistSession: false } }
+);
 
 export async function POST(req: Request) {
   try {
-    const body = await req.json().catch(() => ({}));
-    const mentorSlug = (body?.mentorSlug ?? "").toString().trim();
-    const requester_name = (body?.name ?? "").toString().trim();
-    const requester_email = (body?.email ?? "").toString().trim();
-    const preferred_time = (body?.preferredTime ?? "").toString().trim();
-    const message = (body?.message ?? "").toString().trim();
-
-    if (!mentorSlug || !requester_name || !requester_email.includes("@")) {
-      return new Response(JSON.stringify({ ok: false, error: "Invalid input" }), { status: 400 });
+    // Accept <form> submits and JSON
+    const ct = req.headers.get('content-type') || '';
+    let body: Record<string, any> = {};
+    if (ct.includes('multipart/form-data') || ct.includes('application/x-www-form-urlencoded')) {
+      const form = await req.formData();
+      form.forEach((v, k) => (body[k] = v));
+    } else {
+      body = await req.json().catch(() => ({}));
     }
 
-    // Find mentor id by slug
+    // Normalize fields
+    const mentor_slug = String(body.mentor_slug || body.slug || '').trim();
+    const requester_name = String(body.requester_name || body.name || '').trim();
+    const requester_email = String(body.requester_email || body.email || '').trim();
+    const preferred_time = (body.preferred_time || '') as string;
+    const message = (body.message || '') as string;
+
+    if (!mentor_slug || !requester_name || !requester_email) {
+      return NextResponse.json({ ok: false, error: 'missing_fields' }, { status: 400 });
+    }
+
+    // Look up mentor_id from slug
     const { data: mentor, error: mErr } = await supabaseAdmin
-      .from("mentors")
-      .select("id, slug")
-      .eq("slug", mentorSlug)
-      .single();
+      .from('mentors')
+      .select('id, slug')
+      .eq('slug', mentor_slug)
+      .maybeSingle();
 
     if (mErr || !mentor) {
-      return new Response(JSON.stringify({ ok: false, error: "Mentor not found" }), { status: 404 });
+      return NextResponse.json({ ok: false, error: 'mentor_not_found' }, { status: 404 });
     }
 
-    // Insert request
-    const { error: iErr } = await supabaseAdmin.from("session_requests").insert({
+    // Insert the request
+    const { error: insErr } = await supabaseAdmin.from('session_requests').insert({
       mentor_id: mentor.id,
-      mentor_slug: mentor.slug,
+      mentor_slug,
       requester_name,
       requester_email,
-      preferred_time,
-      message,
-      status: "pending",
+      preferred_time: preferred_time || null,
+      message: message || null,
+      status: 'pending',
     });
 
-    if (iErr) {
-      return new Response(JSON.stringify({ ok: false, error: "Insert failed" }), { status: 500 });
+    if (insErr) {
+      console.error(insErr);
+      return NextResponse.json({ ok: false, error: 'insert_failed' }, { status: 500 });
     }
 
-    return new Response(JSON.stringify({ ok: true }), { status: 200 });
-  } catch {
-    return new Response(JSON.stringify({ ok: false, error: "Unexpected error" }), { status: 500 });
+    // Redirect back to the mentor page with a success flag
+    const url = new URL(`/mentors/${mentor_slug}?ok=1`, req.url);
+    return NextResponse.redirect(url, { status: 303 });
+  } catch (e) {
+    console.error(e);
+    return NextResponse.json({ ok: false, error: 'server_error' }, { status: 500 });
   }
 }

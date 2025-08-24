@@ -1,253 +1,314 @@
-"use client";
+'use client';
 
-import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
-import { supabaseBrowser } from "@/lib/supabaseClient";
+import { useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { createClient } from '@supabase/supabase-js';
 
-type ReqRow = {
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
+
+// ---------- Types ----------
+type Mentor = { id: string; slug: string; display_name: string };
+
+type RequestRow = {
   id: string;
-  mentor_slug: string;
-  requester_name: string;
-  requester_email: string;
+  created_at: string;
+  mentor_id: string | null;
+  mentor_slug: string | null;
+  requester_name: string | null;
+  requester_email: string | null;
   preferred_time: string | null;
   message: string | null;
-  status: "pending" | "accepted" | "declined";
-  created_at: string;
+  status: 'pending' | 'approved' | 'declined';
 };
 
-type Overview = {
-  ok: boolean;
-  profileRole: "mentee" | "mentor" | "admin";
-  displayName: string | null;
-  applicationStatus: null | "pending" | "approved" | "declined" | "suspended" | "blocked";
-  mentorSlug: string | null;
-  mentorAccountStatus: null | "approved" | "suspended" | "blocked";
-};
+type StatusFilter = 'all' | 'pending' | 'approved' | 'declined';
 
+// ---------- Page ----------
 export default function MentorDashboard() {
-  const [state, setState] = useState<"loading" | "noauth" | "ok" | "error">("loading");
-  const [ov, setOv] = useState<Overview | null>(null);
-  const [rows, setRows] = useState<ReqRow[]>([]);
-  const [busyId, setBusyId] = useState<string | null>(null);
+  const router = useRouter();
+  const [mentor, setMentor] = useState<Mentor | null>(null);
 
+  const [loadingReqs, setLoadingReqs] = useState(true);
+  const [reqs, setReqs] = useState<RequestRow[]>([]);
+  const [filter, setFilter] = useState<StatusFilter>('pending');
+
+  // ---- Auth + mentor record
   useEffect(() => {
-    async function run() {
-      const { data } = await supabaseBrowser.auth.getSession();
-      const session = data.session;
-      if (!session) return setState("noauth");
-      try {
-        const res = await fetch("/api/mentor/overview", {
-          headers: { Authorization: `Bearer ${session.access_token}` },
-        });
-        const json = (await res.json()) as Overview;
-        if (!res.ok || !json.ok) throw new Error("bad");
-        setOv(json);
+    let mounted = true;
+    (async () => {
+      const { data } = await supabase.auth.getUser();
+      const u = data?.user ?? null;
+      if (!mounted) return;
 
-        if (json.mentorAccountStatus === "approved" || json.profileRole === "mentor") {
-          const r = await fetch("/api/mentor/requests", {
-            headers: { Authorization: `Bearer ${session.access_token}` },
-          });
-          const jj = await r.json();
-          if (r.ok && jj.ok) setRows(jj.rows as ReqRow[]);
-        }
-        setState("ok");
-      } catch {
-        setState("error");
+      if (!u) {
+        router.replace('/auth?next=/mentor');
+        return;
       }
-    }
-    run();
-  }, []);
 
-  const canUseDashboard = useMemo(() => {
-    if (!ov) return false;
-    if (ov.mentorAccountStatus === "blocked") return false;
-    if (ov.mentorAccountStatus === "suspended") return false;
-    return ov.profileRole === "mentor" || ov.applicationStatus === "approved";
-  }, [ov]);
+      // Get mentor row for this user
+      const { data: m, error } = await supabase
+        .from('mentors')
+        .select('id,slug,display_name')
+        .eq('user_id', u.id)
+        .limit(1)
+        .maybeSingle();
 
-  async function updateStatus(id: string, status: ReqRow["status"]) {
-    setBusyId(id);
+      if (error) console.error(error);
+      setMentor((m as Mentor) ?? null);
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, [router]);
+
+  // ---- Load my incoming requests (from public.session_requests)
+  useEffect(() => {
+    if (!mentor?.id) return;
+    let mounted = true;
+    (async () => {
+      setLoadingReqs(true);
+      const { data, error } = await supabase
+        .from('session_requests')
+        .select(
+          'id,created_at,mentor_id,mentor_slug,requester_name,requester_email,preferred_time,message,status'
+        )
+        .eq('mentor_id', mentor.id)
+        .order('created_at', { ascending: false });
+
+      if (!mounted) return;
+      if (error) {
+        console.error(error);
+        setReqs([]);
+      } else {
+        setReqs((data as RequestRow[]) ?? []);
+      }
+      setLoadingReqs(false);
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, [mentor?.id]);
+
+  // ---- Requests actions
+  async function updateRequest(id: string, status: 'approved' | 'declined') {
     try {
-      const { data } = await supabaseBrowser.auth.getSession();
-      const token = data.session?.access_token;
-      if (!token) return setState("noauth");
-      const res = await fetch(`/api/mentor/requests/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ status }),
-      });
-      const json = await res.json();
-      if (!res.ok || !json.ok) throw new Error("bad");
-      setRows(rows.map((r) => (r.id === id ? (json.row as ReqRow) : r)));
-    } catch {
-      alert("Failed to update status. Try again.");
-    } finally {
-      setBusyId(null);
+      const { error } = await supabase
+        .from('session_requests')
+        .update({ status })
+        .eq('id', id);
+      if (error) throw error;
+      setReqs((prev) => prev.map((r) => (r.id === id ? { ...r, status } : r)));
+    } catch (e) {
+      console.error(e);
+      alert('Could not update request.');
     }
   }
 
-  function StatusPanel() {
-    if (!ov) return null;
+  const filtered = useMemo<RequestRow[]>(() => {
+    if (filter === 'all') return reqs;
+    return reqs.filter((r) => r.status === filter);
+  }, [reqs, filter]);
 
-    if (!ov.applicationStatus && ov.profileRole !== "mentor") {
-      return (
-        <div className="rounded-2xl border p-4">
-          <div className="opacity-80">You haven&apos;t applied yet.</div>
-          <Link href="/apply" className="mt-3 inline-block rounded-full border px-4 py-2 hover:shadow">
-            Apply to become a mentor
-          </Link>
-        </div>
-      );
-    }
+  // ---- History (approved only)
+  const approved = useMemo(
+    () => reqs.filter((r) => r.status === 'approved'),
+    [reqs]
+  );
 
-    if (ov.applicationStatus === "pending") {
-      return (
-        <div className="rounded-2xl border p-4">
-          <div className="text-yellow-300">Pending — waiting for approval.</div>
-        </div>
-      );
+  const groupedByMentee = useMemo(() => {
+    const map = new Map<string, RequestRow[]>();
+    for (const r of approved) {
+      const key = r.requester_email || r.requester_name || 'unknown';
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(r);
     }
-
-    if (ov.applicationStatus === "declined") {
-      return (
-        <div className="rounded-2xl border p-4">
-          <div className="text-red-400">Declined — apply again.</div>
-          <Link href="/apply" className="mt-3 inline-block rounded-full border px-4 py-2 hover:shadow">
-            Edit &amp; resubmit
-          </Link>
-        </div>
-      );
-    }
-
-    if (ov.mentorAccountStatus === "suspended") {
-      return (
-        <div className="rounded-2xl border p-4">
-          <div className="text-yellow-300">Suspended — please wait while the team reviews.</div>
-        </div>
-      );
-    }
-    if (ov.mentorAccountStatus === "blocked") {
-      return (
-        <div className="rounded-2xl border p-4">
-          <div className="text-red-400">
-            Blocked — you can submit an appeal at{" "}
-            <a href="mailto:thefindyourfit@gmail.com" className="underline">thefindyourfit@gmail.com</a>.
-          </div>
-        </div>
-      );
-    }
-
-    return null;
-  }
+    return Array.from(map.entries()).sort((a, b) => {
+      const ad = new Date(a[1][0].created_at).getTime();
+      const bd = new Date(b[1][0].created_at).getTime();
+      return bd - ad;
+    });
+  }, [approved]);
 
   return (
     <main className="mx-auto max-w-6xl px-6 py-10">
-      <h1 className="text-3xl font-bold">Mentor Dashboard</h1>
-
-      {state === "loading" && (
-        <div className="mt-8 animate-pulse">
-          <div className="h-8 w-64 rounded bg-white/10" />
-          <div className="mt-4 h-24 w-full rounded bg-white/10" />
-        </div>
-      )}
-
-      {state === "noauth" && (
-        <div className="mt-8 rounded-2xl border p-5">
-          <div className="opacity-80">Please sign in to view your dashboard.</div>
-          <Link href="/auth" className="mt-3 inline-block rounded-full border px-4 py-2 hover:shadow">
-            Go to Sign in
+      <header className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-3xl font-bold">Mentor dashboard</h1>
+        <nav className="flex items-center gap-2">
+          <Link
+            href="/mentor/profile"
+            className="rounded-full border px-4 py-2 text-sm transition hover:shadow"
+          >
+            Edit profile
           </Link>
+          <Link
+            href="/mentor/availability"
+            className="rounded-full border px-4 py-2 text-sm transition hover:shadow"
+          >
+            Set availability
+          </Link>
+        </nav>
+      </header>
+
+      {!mentor && (
+        <p className="mt-5 opacity-80">
+          You don’t have a mentor profile yet (or it’s not approved). If you
+          believe this is a mistake, contact support.
+        </p>
+      )}
+
+      {/* Requests */}
+      <section className="mt-8 rounded-2xl border p-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-semibold">Incoming requests</h2>
+          <div className="flex gap-2 text-sm">
+            {(['pending', 'approved', 'declined', 'all'] as StatusFilter[]).map(
+              (s) => (
+                <button
+                  key={s}
+                  onClick={() => setFilter(s)}
+                  className={`rounded-full border px-3 py-1 transition ${
+                    filter === s ? 'opacity-100' : 'opacity-60'
+                  }`}
+                >
+                  {s[0].toUpperCase() + s.slice(1)}
+                </button>
+              )
+            )}
+          </div>
         </div>
-      )}
 
-      {state === "error" && (
-        <div className="mt-8 rounded-2xl border p-5 text-red-400">Couldn’t load your status. Try refreshing.</div>
-      )}
+        {loadingReqs ? (
+          <div className="mt-4 opacity-70">Loading…</div>
+        ) : filtered.length === 0 ? (
+          <div className="mt-4 opacity-70">No requests.</div>
+        ) : (
+          <div className="mt-4 overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead className="opacity-70">
+                <tr>
+                  <th className="py-2">Created</th>
+                  <th className="py-2">Requester</th>
+                  <th className="py-2">Email</th>
+                  <th className="py-2">Preferred time</th>
+                  <th className="py-2">Message</th>
+                  <th className="py-2">Status</th>
+                  <th className="py-2"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((r) => (
+                  <tr key={r.id} className="border-t">
+                    <td className="py-2">
+                      {new Date(r.created_at).toLocaleString()}
+                    </td>
+                    <td className="py-2">{r.requester_name ?? '—'}</td>
+                    <td className="py-2">{r.requester_email ?? '—'}</td>
+                    <td className="py-2">{r.preferred_time ?? '—'}</td>
+                    <td className="py-2">{r.message ?? '—'}</td>
+                    <td className="py-2 capitalize">{r.status}</td>
+                    <td className="py-2">
+                      {r.status === 'pending' ? (
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => updateRequest(r.id, 'approved')}
+                            className="rounded-full border px-3 py-1 text-sm transition hover:shadow"
+                          >
+                            Approve
+                          </button>
+                          <button
+                            onClick={() => updateRequest(r.id, 'declined')}
+                            className="rounded-full border px-3 py-1 text-sm transition hover:shadow"
+                          >
+                            Decline
+                          </button>
+                        </div>
+                      ) : (
+                        <span className="opacity-60">—</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
 
-      {state === "ok" && (
-        <>
-          <StatusPanel />
+      {/* History */}
+      <section className="mt-8 rounded-2xl border p-4">
+        <h2 className="text-lg font-semibold">History (approved)</h2>
+        <p className="mt-1 text-sm opacity-80">
+          Overall approved sessions and breakdown by mentee.
+        </p>
 
-          {canUseDashboard && (
-            <>
-              <div className="mt-6 rounded-2xl border p-4">
-                <div className="opacity-80">
-                  Welcome{ov?.displayName ? `, ${ov.displayName}` : ""}. Your public profile:
-                </div>
-                {ov?.mentorSlug ? (
-                  <Link href={`/mentors/${ov.mentorSlug}`} className="mt-2 inline-block underline">
-                    /mentors/{ov.mentorSlug}
-                  </Link>
-                ) : (
-                  <div className="mt-2 opacity-60">Profile will appear after approval.</div>
-                )}
+        <div className="mt-4">
+          <div className="rounded-xl border p-3">
+            <div className="flex flex-wrap gap-6 text-sm">
+              <div>
+                <div className="opacity-70">Total approved</div>
+                <div className="text-xl font-semibold">{approved.length}</div>
               </div>
+              <div>
+                <div className="opacity-70">Unique mentees</div>
+                <div className="text-xl font-semibold">
+                  {groupedByMentee.length}
+                </div>
+              </div>
+            </div>
+          </div>
 
-              <section className="mt-8">
-                <h2 className="text-xl font-semibold">Incoming Requests</h2>
+          {/* Per-mentee lists */}
+          <div className="mt-4 grid gap-3">
+            {groupedByMentee.map(([key, items]) => (
+              <details key={key} className="rounded-xl border p-3">
+                <summary className="cursor-pointer select-none">
+                  <div className="flex items-center justify-between">
+                    <div className="font-medium">
+                      {key}{' '}
+                      <span className="opacity-60 text-sm">
+                        ({items.length} approved)
+                      </span>
+                    </div>
+                    <div className="opacity-70 text-sm">
+                      Last:{' '}
+                      {new Date(items[0].created_at).toLocaleString()}
+                    </div>
+                  </div>
+                </summary>
                 <div className="mt-3 overflow-x-auto">
-                  <table className="w-full border-collapse text-sm">
-                    <thead>
-                      <tr className="text-left">
-                        <th className="border-b px-3 py-2">Created</th>
-                        <th className="border-b px-3 py-2">Requester</th>
-                        <th className="border-b px-3 py-2">Email</th>
-                        <th className="border-b px-3 py-2">Preferred time</th>
-                        <th className="border-b px-3 py-2">Message</th>
-                        <th className="border-b px-3 py-2">Status</th>
-                        <th className="border-b px-3 py-2">Actions</th>
+                  <table className="w-full text-left text-sm">
+                    <thead className="opacity-70">
+                      <tr>
+                        <th className="py-2">Created</th>
+                        <th className="py-2">Preferred time</th>
+                        <th className="py-2">Message</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {rows.map((r) => (
-                        <tr key={r.id} className="align-top">
-                          <td className="border-b px-3 py-2 opacity-80">
+                      {items.map((r) => (
+                        <tr key={r.id} className="border-t">
+                          <td className="py-2">
                             {new Date(r.created_at).toLocaleString()}
                           </td>
-                          <td className="border-b px-3 py-2">{r.requester_name}</td>
-                          <td className="border-b px-3 py-2 font-mono">{r.requester_email}</td>
-                          <td className="border-b px-3 py-2">{r.preferred_time || "—"}</td>
-                          <td className="border-b px-3 py-2">{r.message || "—"}</td>
-                          <td className="border-b px-3 py-2">{r.status}</td>
-                          <td className="border-b px-3 py-2">
-                            <div className="flex gap-2">
-                              <button
-                                onClick={() => updateStatus(r.id, "accepted")}
-                                disabled={busyId === r.id}
-                                className={`rounded-full border px-3 py-1 text-xs transition ${
-                                  busyId === r.id ? "opacity-60" : "hover:shadow"
-                                }`}
-                              >
-                                Accept
-                              </button>
-                              <button
-                                onClick={() => updateStatus(r.id, "declined")}
-                                disabled={busyId === r.id}
-                                className={`rounded-full border px-3 py-1 text-xs transition ${
-                                  busyId === r.id ? "opacity-60" : "hover:shadow"
-                                }`}
-                              >
-                                Decline
-                              </button>
-                            </div>
-                          </td>
+                          <td className="py-2">{r.preferred_time ?? '—'}</td>
+                          <td className="py-2">{r.message ?? '—'}</td>
                         </tr>
                       ))}
-                      {rows.length === 0 && (
-                        <tr>
-                          <td className="px-3 py-6 opacity-70" colSpan={7}>
-                            No requests yet.
-                          </td>
-                        </tr>
-                      )}
                     </tbody>
                   </table>
                 </div>
-              </section>
-            </>
-          )}
-        </>
-      )}
+              </details>
+            ))}
+            {groupedByMentee.length === 0 && (
+              <div className="opacity-70">No approved sessions yet.</div>
+            )}
+          </div>
+        </div>
+      </section>
     </main>
   );
 }
