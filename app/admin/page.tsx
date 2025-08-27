@@ -15,6 +15,7 @@ type Row = {
   created_at: string;
 };
 
+
 export default function AdminPage() {
   const [email, setEmail] = useState<string | null>(null);
   const [rows, setRows] = useState<Row[] | null>(null);
