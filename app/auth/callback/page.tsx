@@ -1,62 +1,81 @@
-'use client';
+// OAuth callback page (no `any`).
+// Reads URL params like ?code=...&error=... and shows a simple state.
+// If you need to exchange the code, do it in a server action or effect without using `any`.
 
-import { useEffect, useState } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
-import { createClient } from '@supabase/supabase-js';
+type SearchParams = Record<string, string | string[] | undefined>;
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
+function asSingle(value: string | string[] | undefined): string | undefined {
+  return Array.isArray(value) ? value[0] : value;
+}
 
-export default function AuthCallback() {
-  const router = useRouter();
-  const search = useSearchParams();
-  const [status, setStatus] = useState<'working' | 'ok' | 'error'>('working');
+export default function OAuthCallbackPage({
+  searchParams,
+}: {
+  searchParams: SearchParams;
+}) {
+  const code = asSingle(searchParams.code);
+  const error = asSingle(searchParams.error);
+  const state = asSingle(searchParams.state);
 
-  useEffect(() => {
-    const code = search.get('code');
-    const next = search.get('next') || '/';
-
-    async function run() {
-      try {
-        if (!code) throw new Error('No code in URL');
-
-        // Compatible with both signatures:
-        //   new: exchangeCodeForSession({ code })
-        //   old: exchangeCodeForSession(code)
-        const auth: any = supabase.auth as any;
-        const res =
-          typeof auth.exchangeCodeForSession === 'function'
-            ? await (async () => {
-                try {
-                  return await auth.exchangeCodeForSession({ code });
-                } catch {
-                  return await auth.exchangeCodeForSession(code as any);
-                }
-              })()
-            : { error: new Error('exchangeCodeForSession not available') };
-
-        if (res?.error) throw res.error;
-
-        setStatus('ok');
-        router.replace(next);
-      } catch (e) {
-        console.error(e);
-        setStatus('error');
-      }
-    }
-
-    run();
-  }, [router, search]);
+  const hasError = typeof error === "string" && error.length > 0;
+  const hasCode = typeof code === "string" && code.length > 0;
 
   return (
-    <main className="mx-auto max-w-md px-6 py-12">
-      {status === 'working' && <p>Signing you in…</p>}
-      {status === 'ok' && <p>Signed in. Redirecting…</p>}
-      {status === 'error' && (
-        <p>Could not complete sign-in. Please request a new link.</p>
+    <main
+      style={{
+        maxWidth: 520,
+        margin: "48px auto",
+        padding: 16,
+        border: "1px solid #e5e7eb",
+        borderRadius: 12,
+        fontFamily:
+          "-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial,Apple Color Emoji,Segoe UI Emoji",
+      }}
+    >
+      <h1 style={{ fontSize: 20, fontWeight: 600, marginBottom: 8 }}>
+        Authentication Callback
+      </h1>
+
+      {hasError && (
+        <p style={{ color: "#b91c1c", marginBottom: 12 }}>
+          Error: <strong>{error}</strong>
+        </p>
       )}
+
+      {!hasError && hasCode && (
+        <p style={{ marginBottom: 12 }}>
+          Success! Received authorization <strong>code</strong>.
+        </p>
+      )}
+
+      {!hasError && !hasCode && (
+        <p style={{ marginBottom: 12 }}>
+          No code present. If you were redirected here unexpectedly, try
+          starting the sign-in again.
+        </p>
+      )}
+
+      {state && (
+        <p style={{ fontSize: 12, color: "#6b7280" }}>
+          State: <code>{state}</code>
+        </p>
+      )}
+
+      <div style={{ marginTop: 16 }}>
+        <a
+          href="/"
+          style={{
+            display: "inline-block",
+            padding: "8px 12px",
+            borderRadius: 8,
+            border: "1px solid #0F6EFD",
+            color: "#0F6EFD",
+            textDecoration: "none",
+          }}
+        >
+          Go to Home
+        </a>
+      </div>
     </main>
   );
 }
