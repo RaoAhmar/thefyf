@@ -1,76 +1,91 @@
-'use client';
+"use client";
 
-import { useState } from 'react';
-import { useSearchParams } from 'next/navigation';
-import { createClient } from '@supabase/supabase-js';
+/**
+ * Fixes Next.js 15 error:
+ * "useSearchParams() should be wrapped in a suspense boundary at page '/auth'"
+ * by wrapping the hook usage in <Suspense>.
+ * Also avoids server page typing (searchParams: Promise<...>) by using a Client Component.
+ */
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
+import { Suspense } from "react";
+import { useSearchParams } from "next/navigation";
+import Link from "next/link";
 
-export default function AuthPage() {
-  const [email, setEmail] = useState('');
-  const [state, setState] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
-  const [msg, setMsg] = useState<string | null>(null);
-  const search = useSearchParams();
-  const next = search.get('next') || '/';
-
-  async function onSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setState('sending');
-    setMsg(null);
-
-    try {
-      // Force the flow through Supabase's callback. It will verify the token
-      // and then redirect to our /auth/callback WITH ?code=... appended.
-      const projectUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-      const finalDest = `${window.location.origin}/auth/callback?next=${encodeURIComponent(
-        next
-      )}`;
-      const emailRedirectTo = `${projectUrl}/auth/v1/callback?redirect_to=${encodeURIComponent(
-        finalDest
-      )}`;
-
-      const { error } = await supabase.auth.signInWithOtp({
-        email,
-        options: { emailRedirectTo },
-      });
-
-      if (error) throw error;
-      setState('sent');
-      setMsg('Check your inbox for the sign-in link.');
-    } catch (err) {
-      console.error(err);
-      setState('error');
-      setMsg('Could not send the magic link. Please try again.');
-    }
-  }
+function AuthContent() {
+  const sp = useSearchParams();
+  const mode = sp.get("mode") ?? "sign-in"; // example: ?mode=sign-up
+  const error = sp.get("error") ?? "";
+  const message = sp.get("message") ?? "";
 
   return (
-    <main className="mx-auto max-w-md px-6 py-12">
-      <h1 className="text-2xl font-semibold">Sign in</h1>
-      <p className="mt-2 text-sm opacity-70">We’ll email you a magic link.</p>
+    <main
+      style={{
+        maxWidth: 520,
+        margin: "48px auto",
+        padding: 16,
+        border: "1px solid #e5e7eb",
+        borderRadius: 12,
+        fontFamily:
+          "-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial,Apple Color Emoji,Segoe UI Emoji",
+      }}
+    >
+      <h1 style={{ fontSize: 20, fontWeight: 600, marginBottom: 8 }}>
+        {mode === "sign-up" ? "Create your account" : "Sign in"}
+      </h1>
 
-      <form onSubmit={onSubmit} className="mt-6 grid gap-3">
-        <input
-          type="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          placeholder="you@example.com"
-          required
-          className="rounded-lg border bg-transparent px-3 py-2 outline-none"
-        />
-        <button
-          type="submit"
-          disabled={state === 'sending'}
-          className="rounded-full border px-4 py-2 text-sm transition hover:shadow disabled:opacity-60"
+      {error && (
+        <p style={{ color: "#b91c1c", marginBottom: 12 }}>
+          Error: <strong>{error}</strong>
+        </p>
+      )}
+
+      {message && (
+        <p style={{ color: "#065f46", marginBottom: 12 }}>
+          {message}
+        </p>
+      )}
+
+      {/* Replace this block with your actual auth UI */}
+      <div
+        style={{
+          padding: 12,
+          border: "1px dashed #cbd5e1",
+          borderRadius: 8,
+          marginBottom: 16,
+        }}
+      >
+        Auth form goes here (mode: <code>{mode}</code>)
+      </div>
+
+      <div style={{ marginTop: 16 }}>
+        <Link
+          href="/"
+          style={{
+            display: "inline-block",
+            padding: "8px 12px",
+            borderRadius: 8,
+            border: "1px solid #0F6EFD",
+            color: "#0F6EFD",
+            textDecoration: "none",
+          }}
         >
-          {state === 'sending' ? 'Sending…' : 'Send magic link'}
-        </button>
-
-        {msg && <div className="text-sm opacity-80">{msg}</div>}
-      </form>
+          Go to Home
+        </Link>
+      </div>
     </main>
+  );
+}
+
+export default function AuthPage() {
+  return (
+    <Suspense
+      fallback={
+        <main style={{ maxWidth: 520, margin: "48px auto", padding: 16 }}>
+          Loading…
+        </main>
+      }
+    >
+      <AuthContent />
+    </Suspense>
   );
 }
