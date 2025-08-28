@@ -1,0 +1,27 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ---- Global dark theme (black bg, white text) ---- */
+:root {
+  --hairline: rgba(255,255,255,0.15);
+}
+
+html, body {
+  @apply bg-black text-white antialiased;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Make default borders subtle on dark */
+*, ::before, ::after {
+  border-color: var(--hairline);
+}
+
+/* Simple, accessible link styling */
+a {
+  @apply underline-offset-4 hover:underline;
+}
+
+/* Selection stays monochrome */
+::selection { background: #fff; color: #000; }

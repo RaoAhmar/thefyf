@@ -1,0 +1,49 @@
+// GET /api/geo/cities?country=PK -> ["Karachi", "Lahore", ...]
+type RestCountryName = { name?: { common?: string } };
+type CountriesNowResp = { data?: unknown; error?: boolean; msg?: string };
+
+export async function GET(req: Request) {
+  const url = new URL(req.url);
+  const code = (url.searchParams.get("country") || "").toUpperCase();
+  if (!code) {
+    return new Response(JSON.stringify({ ok: false, error: "missing_country" }), { status: 400 });
+  }
+
+  try {
+    // 1) Resolve country code -> country name (REST Countries)
+    const resName = await fetch(
+      `https://restcountries.com/v3.1/alpha/${encodeURIComponent(code)}?fields=name`,
+      { next: { revalidate: 60 * 60 * 24 } }
+    );
+    if (!resName.ok) throw new Error("country_lookup_failed");
+
+    const nameJson: unknown = await resName.json();
+    const nameObj: RestCountryName =
+      Array.isArray(nameJson) ? (nameJson[0] as RestCountryName) : (nameJson as RestCountryName);
+
+    const countryName = String(nameObj?.name?.common ?? "").trim();
+    if (!countryName) throw new Error("country_name_missing");
+
+    // 2) Fetch city list (countriesnow.space)
+    const resCities = await fetch("https://countriesnow.space/api/v0.1/countries/cities", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ country: countryName }),
+      next: { revalidate: 60 * 60 * 24 },
+    });
+    if (!resCities.ok) throw new Error("cities_fetch_failed");
+
+    const citiesJson: CountriesNowResp = (await resCities.json()) as CountriesNowResp;
+    const raw = Array.isArray(citiesJson.data) ? (citiesJson.data as unknown[]) : [];
+    const uniqueSorted = [...new Set(raw.map((c) => String(c).trim()).filter(Boolean))].sort((a, b) =>
+      a.localeCompare(b)
+    );
+
+    return new Response(JSON.stringify({ ok: true, rows: uniqueSorted }), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
+  } catch {
+    return new Response(JSON.stringify({ ok: false, error: "cities_unavailable" }), { status: 502 });
+  }
+}
