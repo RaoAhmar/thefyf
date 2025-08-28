@@ -1,6 +1,6 @@
-// OAuth callback page (no `any`).
-// Reads URL params like ?code=...&error=... and shows a simple state.
-// If you need to exchange the code, do it in a server action or effect without using `any`.
+// OAuth callback page (no `any`, and uses <Link> for internal nav).
+
+import Link from "next/link";
 
 type SearchParams = Record<string, string | string[] | undefined>;
 
@@ -62,7 +62,7 @@ export default function OAuthCallbackPage({
       )}
 
       <div style={{ marginTop: 16 }}>
-        <a
+        <Link
           href="/"
           style={{
             display: "inline-block",
@@ -74,7 +74,7 @@ export default function OAuthCallbackPage({
           }}
         >
           Go to Home
-        </a>
+        </Link>
       </div>
     </main>
   );
