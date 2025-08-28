@@ -1,21 +1,24 @@
-// OAuth callback page (no `any`, and uses <Link> for internal nav).
+// OAuth callback page compatible with Next.js 15 page props typing.
+// In Next 15, `searchParams` is a Promise in Server Components.
+// We await it, then read the values safely.
 
 import Link from "next/link";
 
-type SearchParams = Record<string, string | string[] | undefined>;
+type SearchParamsShape = Record<string, string | string[] | undefined>;
 
 function asSingle(value: string | string[] | undefined): string | undefined {
   return Array.isArray(value) ? value[0] : value;
 }
 
-export default function OAuthCallbackPage({
+export default async function OAuthCallbackPage({
   searchParams,
 }: {
-  searchParams: SearchParams;
+  searchParams: Promise<SearchParamsShape>;
 }) {
-  const code = asSingle(searchParams.code);
-  const error = asSingle(searchParams.error);
-  const state = asSingle(searchParams.state);
+  const sp = await searchParams;
+  const code = asSingle(sp.code);
+  const error = asSingle(sp.error);
+  const state = asSingle(sp.state);
 
   const hasError = typeof error === "string" && error.length > 0;
   const hasCode = typeof code === "string" && code.length > 0;
